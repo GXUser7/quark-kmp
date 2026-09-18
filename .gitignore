@@ -1,0 +1,12 @@
+.gradle/
+build/
+*/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# Fetched by the :app:fetchMpv task, 115 MB.
+app/resources/*/libmpv-2.dll
+app/resources/*/libmpv.so*
+app/resources/*/libmpv*.dylib

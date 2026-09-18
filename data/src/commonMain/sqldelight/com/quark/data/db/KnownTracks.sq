@@ -1,0 +1,46 @@
+-- Column names and types match the Drift schema of quark.db byte for byte, so an
+-- existing library opens as-is instead of needing an import step.
+CREATE TABLE known_tracks (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    -- Comma-joined, as Drift wrote it. Split on read.
+    artists TEXT NOT NULL,
+    album TEXT NOT NULL,
+    cover_url TEXT,
+    cover_path TEXT,
+    blur_cover_path TEXT,
+    md5 TEXT,
+    source TEXT NOT NULL DEFAULT 'local',
+    sourceid TEXT,
+    downloaded INTEGER AS kotlin.Boolean NOT NULL
+);
+
+CREATE INDEX idx_known_tracks_title ON known_tracks(title);
+CREATE INDEX idx_known_tracks_artists ON known_tracks(artists);
+
+selectAll:
+SELECT * FROM known_tracks;
+
+selectByPath:
+SELECT * FROM known_tracks WHERE path = ?;
+
+selectPaths:
+SELECT path FROM known_tracks;
+
+insertOrIgnore:
+INSERT OR IGNORE INTO known_tracks (path, title, artists, album, cover_url, source, sourceid, downloaded)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+upsert:
+INSERT OR REPLACE INTO known_tracks (path, title, artists, album, cover_url, source, sourceid, downloaded)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+lastInsertedId:
+SELECT last_insert_rowid();
+
+setCoverPaths:
+UPDATE known_tracks SET cover_path = ?, blur_cover_path = ?, md5 = ? WHERE id = ?;
+
+deleteByPath:
+DELETE FROM known_tracks WHERE path = ?;

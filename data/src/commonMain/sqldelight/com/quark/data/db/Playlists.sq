@@ -1,0 +1,59 @@
+CREATE TABLE playlists (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    cover_url TEXT,
+    cover_path TEXT,
+    description TEXT,
+    blur_cover_path TEXT,
+    -- 'Playlist' or 'Album'.
+    type TEXT NOT NULL DEFAULT 'Playlist'
+);
+
+CREATE TABLE playlist_tracks (
+    track INTEGER NOT NULL REFERENCES known_tracks(id),
+    playlist INTEGER NOT NULL REFERENCES playlists(id),
+    position INTEGER NOT NULL,
+    PRIMARY KEY (playlist, track)
+);
+
+CREATE INDEX idx_playlist_tracks_playlist_pos ON playlist_tracks(playlist, position);
+
+selectAll:
+SELECT * FROM playlists;
+
+selectById:
+SELECT * FROM playlists WHERE id = ?;
+
+create:
+INSERT INTO playlists (title) VALUES (?);
+
+rename:
+UPDATE playlists SET title = ? WHERE id = ?;
+
+setCover:
+UPDATE playlists SET cover_path = ? WHERE id = ?;
+
+delete:
+DELETE FROM playlists WHERE id = ?;
+
+deleteTracksOf:
+DELETE FROM playlist_tracks WHERE playlist = ?;
+
+-- Appends at the end; the position is derived rather than passed in so two
+-- concurrent inserts cannot land on the same slot.
+appendTrack:
+INSERT INTO playlist_tracks (playlist, track, position)
+VALUES (?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM playlist_tracks WHERE playlist = ?));
+
+removeTrackAt:
+DELETE FROM playlist_tracks WHERE playlist = ? AND position = ?;
+
+tracksOf:
+SELECT kt.*
+FROM known_tracks kt
+INNER JOIN playlist_tracks pt ON pt.track = kt.id
+WHERE pt.playlist = ?
+ORDER BY pt.position ASC;
+
+countTracksOf:
+SELECT COUNT(*) FROM playlist_tracks WHERE playlist = ?;

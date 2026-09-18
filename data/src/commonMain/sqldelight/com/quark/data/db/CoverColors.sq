@@ -1,0 +1,14 @@
+-- Accent colours extracted from a cover, keyed by the md5 of the cover bytes.
+-- `colors` is a json array of ARGB32 ints, as the Dart version wrote it.
+CREATE TABLE cover_colors (
+    md5 TEXT NOT NULL PRIMARY KEY,
+    colors TEXT NOT NULL
+);
+
+CREATE INDEX idx_cover_colors_md5 ON cover_colors(md5);
+
+get:
+SELECT colors FROM cover_colors WHERE md5 = ?;
+
+put:
+INSERT OR REPLACE INTO cover_colors (md5, colors) VALUES (?, ?);

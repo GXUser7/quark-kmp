@@ -1,0 +1,32 @@
+-- One row per listen, written when a track is left after more than 10 seconds.
+CREATE TABLE listen_stats (
+    track INTEGER NOT NULL REFERENCES known_tracks(id),
+    -- Unix seconds, matching Drift's dateTime() storage.
+    time INTEGER NOT NULL,
+    played_seconds INTEGER NOT NULL,
+    total_track_duration INTEGER NOT NULL,
+    progress_percent INTEGER NOT NULL,
+    is_skipped INTEGER AS kotlin.Boolean NOT NULL
+);
+
+CREATE INDEX idx_listen_stats_track ON listen_stats(track);
+CREATE INDEX idx_listen_stats_time ON listen_stats(time);
+
+insert:
+INSERT INTO listen_stats (track, time, played_seconds, total_track_duration, progress_percent, is_skipped)
+VALUES (?, ?, ?, ?, ?, ?);
+
+since:
+SELECT * FROM listen_stats WHERE time >= ? ORDER BY time DESC;
+
+topTracks:
+SELECT kt.*, COUNT(*) AS plays, SUM(ls.played_seconds) AS seconds
+FROM listen_stats ls
+INNER JOIN known_tracks kt ON kt.id = ls.track
+WHERE ls.time >= ? AND ls.is_skipped = 0
+GROUP BY ls.track
+ORDER BY plays DESC
+LIMIT ?;
+
+totalSecondsSince:
+SELECT COALESCE(SUM(played_seconds), 0) FROM listen_stats WHERE time >= ?;
