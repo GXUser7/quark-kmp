@@ -11,6 +11,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":core"))
             implementation("app.cash.sqldelight:runtime:2.1.0")
+            implementation("io.ktor:ktor-client-core:3.4.0")
             implementation("app.cash.sqldelight:coroutines-extensions:2.1.0")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")

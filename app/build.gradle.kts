@@ -25,6 +25,7 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.materialIconsExtended)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
+            implementation("io.ktor:ktor-client-core:3.4.0")
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))

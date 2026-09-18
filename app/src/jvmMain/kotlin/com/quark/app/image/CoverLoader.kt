@@ -7,6 +7,7 @@ import com.quark.app.theme.AccentColors
 import com.quark.core.color.AccentPalette
 import com.quark.core.model.CoverType
 import com.quark.core.model.Track
+import com.quark.data.images.CoverCache
 import com.quark.data.local.TagReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,7 +33,10 @@ data class Cover(
  * cache is an LRU with a hard cap rather than the unbounded maps the Dart build
  * kept on its singletons.
  */
-class CoverLoader(private val capacity: Int = DEFAULT_CAPACITY) {
+class CoverLoader(
+    private val remote: CoverCache? = null,
+    private val capacity: Int = DEFAULT_CAPACITY,
+) {
 
     private val cache: MutableMap<String, Cover> = Collections.synchronizedMap(
         object : LinkedHashMap<String, Cover>(16, 0.75f, true) {
@@ -49,7 +53,7 @@ class CoverLoader(private val capacity: Int = DEFAULT_CAPACITY) {
         cache[key]?.let { return it }
         if (key in empty) return null
 
-        val bytes = withContext(Dispatchers.IO) { readBytes(track) }
+        val bytes = readBytes(track)
         if (bytes == null) {
             empty += key
             return null
@@ -65,14 +69,20 @@ class CoverLoader(private val capacity: Int = DEFAULT_CAPACITY) {
         return cover
     }
 
-    private fun readBytes(track: Track): ByteArray? = when (track.coverType) {
-        CoverType.BuiltIn -> TagReader.readArtwork(File(track.filepath))
+    private suspend fun readBytes(track: Track): ByteArray? = when (track.coverType) {
+        CoverType.BuiltIn -> withContext(Dispatchers.IO) {
+            TagReader.readArtwork(File(track.filepath))
+        }
 
-        CoverType.ExternalFile -> File(track.cover).takeIf(File::isFile)?.readBytes()
+        CoverType.ExternalFile -> withContext(Dispatchers.IO) {
+            File(track.cover).takeIf(File::isFile)?.readBytes()
+        }
 
-        // Remote covers are fetched and cached by the network layer, which
-        // writes them to disk; nothing to do here until then.
-        CoverType.Url, CoverType.NoCover -> null
+        // Downloaded once and kept on disk, so scrolling a remote playlist
+        // twice does not fetch the same artwork twice.
+        CoverType.Url -> remote?.get(track.cover)
+
+        CoverType.NoCover -> null
     }
 
     private fun decode(bytes: ByteArray): Cover? = try {

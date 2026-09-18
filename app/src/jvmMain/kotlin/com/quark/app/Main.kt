@@ -9,11 +9,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
@@ -32,6 +37,8 @@ import com.quark.app.ui.LocalBackdrop
 import com.quark.app.ui.PillButton
 import com.quark.app.ui.QText
 import com.quark.app.ui.backdropBackground
+import com.quark.app.yandex.YandexScreen
+import com.quark.app.yandex.YandexViewModel
 import java.awt.Frame
 
 fun main() = application {
@@ -52,6 +59,8 @@ fun main() = application {
         }
 
         val model = remember { PlayerViewModel(app) }
+        val yandex = remember { YandexViewModel(app) }
+        var yandexOpen by remember { mutableStateOf(false) }
         val accent by model.accent.collectAsState()
         val cover by model.cover.collectAsState()
         val state by model.state.collectAsState()
@@ -71,9 +80,17 @@ fun main() = application {
                         .backdropBackground(backdrop, colors.backgroundScrim, colors.background)
                 ) {
                     if (state.playlist.isEmpty()) {
-                        StartScreen(model, window)
+                        StartScreen(model, window, onYandex = { yandexOpen = true })
                     } else {
                         PlayerScreen(model)
+                    }
+
+                    AnimatedVisibility(yandexOpen, enter = fadeIn(), exit = fadeOut()) {
+                        YandexScreen(
+                            model = yandex,
+                            onClose = { yandexOpen = false },
+                            modifier = Modifier.fillMaxSize().padding(48.dp),
+                        )
                     }
                 }
             }
@@ -86,7 +103,7 @@ fun main() = application {
  * original's opening screen: a line about the player and the ways in.
  */
 @Composable
-private fun StartScreen(model: PlayerViewModel, owner: Frame?) {
+private fun StartScreen(model: PlayerViewModel, owner: Frame?, onYandex: () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -115,6 +132,12 @@ private fun StartScreen(model: PlayerViewModel, owner: Frame?) {
             PillButton(
                 text = "Add files",
                 onClick = { model.open(FilePicker.pickAudioFiles(owner)) },
+                modifier = Modifier.width(350.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            PillButton(
+                text = "Yandex Music",
+                onClick = onYandex,
                 modifier = Modifier.width(350.dp),
             )
         }

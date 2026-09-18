@@ -1,21 +1,20 @@
 package com.quark.app
 
-import com.quark.core.model.PlaySourceType
-import com.quark.core.model.Track
+import com.quark.app.yandex.YandexSession
 import com.quark.core.settings.SettingsStore
 import com.quark.data.db.DatabaseFactory
 import com.quark.data.db.QuarkDatabase
+import com.quark.data.images.CoverCache
 import com.quark.data.local.LibraryScanner
 import com.quark.data.repository.ListenStatsRepository
 import com.quark.data.repository.PlaylistRepository
 import com.quark.data.repository.TrackRepository
 import com.quark.data.settings.JsonSettingsStore
+import com.quark.network.yandex.YandexClient
 import com.quark.platform.AppDirs
 import com.quark.player.AudioEngine
-import com.quark.player.MediaSource
 import com.quark.player.MpvAudioEngine
 import com.quark.player.PlayerController
-import com.quark.player.SourceResolver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,6 +36,8 @@ class QuarkApp private constructor(
     val playlists: PlaylistRepository,
     val listenStats: ListenStatsRepository,
     val scanner: LibraryScanner,
+    val covers: CoverCache,
+    val yandex: YandexSession,
     private val engine: AudioEngine,
     val controller: PlayerController,
 ) {
@@ -50,52 +51,33 @@ class QuarkApp private constructor(
 
     companion object {
         /**
-         * Builds the graph. Throws only if the database cannot be opened —
-         * a missing libmpv is reported as [EngineFailure] instead, because the
-         * rest of the application is still usable and the user needs to be told
-         * what to install rather than shown a stack trace.
+         * Builds the graph. A missing libmpv fails here, and the window shows
+         * the message rather than a stack trace, because it names what to
+         * install.
          */
         fun start(): Result<QuarkApp> = runCatching {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val settings = JsonSettingsStore(AppDirs.support.resolve("settings.json"), scope)
             val database = DatabaseFactory.open(AppDirs.database)
+            val http = YandexClient.defaultHttpClient()
 
-            val tracks = TrackRepository(database, Dispatchers.IO)
-            val playlists = PlaylistRepository(database, Dispatchers.IO)
-            val listenStats = ListenStatsRepository(database, Dispatchers.IO)
-
+            val yandex = YandexSession(settings, scope, http)
             val engine = MpvAudioEngine()
-            val controller = PlayerController(engine, LocalSourceResolver, scope)
+            val controller = PlayerController(engine, QuarkSourceResolver(yandex), scope)
 
             QuarkApp(
                 scope = scope,
                 settings = settings,
                 database = database,
-                tracks = tracks,
-                playlists = playlists,
-                listenStats = listenStats,
+                tracks = TrackRepository(database, Dispatchers.IO),
+                playlists = PlaylistRepository(database, Dispatchers.IO),
+                listenStats = ListenStatsRepository(database, Dispatchers.IO),
                 scanner = LibraryScanner(),
+                covers = CoverCache(AppDirs.coverCache, http),
+                yandex = yandex,
                 engine = engine,
                 controller = controller,
             )
         }
     }
 }
-
-/**
- * Local files only, for now. Remote sources resolve through their own api and
- * arrive with the network layer.
- */
-private object LocalSourceResolver : SourceResolver {
-    override suspend fun resolve(track: Track): MediaSource = when (track.playSource) {
-        PlaySourceType.LocalFile -> MediaSource.LocalFile(track.filepath)
-        PlaySourceType.Url -> MediaSource.Network(track.filepath)
-    }
-}
-
-private val Track.playSource: PlaySourceType
-    get() = if (filepath.startsWith("http://") || filepath.startsWith("https://")) {
-        PlaySourceType.Url
-    } else {
-        PlaySourceType.LocalFile
-    }

@@ -47,7 +47,7 @@ sealed interface LibraryStatus {
 class PlayerViewModel(private val app: QuarkApp) : PlayerUi {
 
     private val scope = app.scope
-    private val coverLoader = CoverLoader()
+    private val coverLoader = CoverLoader(app.covers)
 
     override val state: StateFlow<PlayerState> = app.controller.state
 
