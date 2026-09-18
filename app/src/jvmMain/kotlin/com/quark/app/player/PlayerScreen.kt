@@ -32,7 +32,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -58,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -88,7 +93,13 @@ private val PANEL_WIDTH = 400.dp
  * `playerPadding` rule.
  */
 @Composable
-fun PlayerScreen(model: PlayerUi, modifier: Modifier = Modifier) {
+fun PlayerScreen(
+    model: PlayerUi,
+    modifier: Modifier = Modifier,
+    onOpenLyrics: () -> Unit = {},
+    onOpenVibe: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+) {
     val state by model.state.collectAsState()
     val cover by model.cover.collectAsState()
     val status by model.status.collectAsState()
@@ -106,6 +117,9 @@ fun PlayerScreen(model: PlayerUi, modifier: Modifier = Modifier) {
                 model = model,
                 panelOpen = panelOpen && roomForPanel,
                 onTogglePanel = { panelOpen = !panelOpen },
+                onOpenLyrics = onOpenLyrics,
+                onOpenVibe = onOpenVibe,
+                onOpenSettings = onOpenSettings,
             )
         }
     }
@@ -119,6 +133,9 @@ private fun FullPlayer(
     model: PlayerUi,
     panelOpen: Boolean,
     onTogglePanel: () -> Unit,
+    onOpenLyrics: () -> Unit,
+    onOpenVibe: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
         NowPlaying(
@@ -127,6 +144,9 @@ private fun FullPlayer(
             model = model,
             panelOpen = panelOpen,
             onTogglePanel = onTogglePanel,
+            onOpenLyrics = onOpenLyrics,
+            onOpenVibe = onOpenVibe,
+            onOpenSettings = onOpenSettings,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(start = if (panelOpen) PANEL_WIDTH else 0.dp),
@@ -155,6 +175,9 @@ private fun NowPlaying(
     model: PlayerUi,
     panelOpen: Boolean,
     onTogglePanel: () -> Unit,
+    onOpenLyrics: () -> Unit,
+    onOpenVibe: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -194,7 +217,15 @@ private fun NowPlaying(
         Spacer(Modifier.height(16.dp))
         VolumeRow(state, model, Modifier.widthIn(max = 260.dp))
         Spacer(Modifier.height(18.dp))
-        SecondaryRow(state, model, panelOpen, onTogglePanel)
+        SecondaryRow(
+            state = state,
+            model = model,
+            panelOpen = panelOpen,
+            onTogglePanel = onTogglePanel,
+            onOpenLyrics = onOpenLyrics,
+            onOpenVibe = onOpenVibe,
+            onOpenSettings = onOpenSettings,
+        )
     }
 }
 
@@ -299,6 +330,9 @@ private fun SecondaryRow(
     model: PlayerUi,
     panelOpen: Boolean,
     onTogglePanel: () -> Unit,
+    onOpenLyrics: () -> Unit,
+    onOpenVibe: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         CircleButton(
@@ -322,6 +356,24 @@ private fun SecondaryRow(
             iconSize = 18.dp,
             active = state.repeat == RepeatMode.One,
         )
+        CircleButton(
+            icon = Icons.Filled.Lyrics,
+            onClick = onOpenLyrics,
+            diameter = 36.dp,
+            iconSize = 18.dp,
+        )
+        CircleButton(
+            icon = Icons.Filled.GraphicEq,
+            onClick = onOpenVibe,
+            diameter = 36.dp,
+            iconSize = 18.dp,
+        )
+        CircleButton(
+            icon = Icons.Filled.Settings,
+            onClick = onOpenSettings,
+            diameter = 36.dp,
+            iconSize = 18.dp,
+        )
     }
 }
 
@@ -340,20 +392,30 @@ private fun PlaylistPanel(
         glass = Glass.Card,
         modifier = modifier,
     ) {
+        var query by remember { mutableStateOf("") }
+        val shown = remember(state.playlist, query) { state.playlist.matching(query) }
+
         Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp)) {
-            PanelHeader(state, status, onClose)
-            Spacer(Modifier.height(10.dp))
+            PanelHeader(state, status, shown.size, onClose)
+            Spacer(Modifier.height(8.dp))
+            SearchField(query, { query = it })
+            Spacer(Modifier.height(8.dp))
             Divider()
             Spacer(Modifier.height(6.dp))
-            TrackList(state, model, Modifier.weight(1f))
+            TrackList(state, shown, model, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun PanelHeader(state: PlayerState, status: LibraryStatus, onClose: () -> Unit) {
+private fun PanelHeader(
+    state: PlayerState,
+    status: LibraryStatus,
+    shown: Int,
+    onClose: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        QIcon(Icons.Filled.Search, Modifier.size(20.dp), Quark.colors.textSecondary)
+        Spacer(Modifier.size(20.dp))
         Column(
             Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -380,10 +442,63 @@ private fun PanelHeader(state: PlayerState, status: LibraryStatus, onClose: () -
     }
 }
 
+/** Title or artist contains every word typed, in any order. */
+private fun List<Track>.matching(query: String): List<Track> {
+    val words = query.trim().lowercase().split(' ').filter(String::isNotEmpty)
+    if (words.isEmpty()) return this
+    return filter { track ->
+        val haystack = "${'$'}{track.title} ${'$'}{track.artistLine}".lowercase()
+        words.all { it in haystack }
+    }
+}
+
 @Composable
-private fun TrackList(state: PlayerState, model: PlayerUi, modifier: Modifier = Modifier) {
+private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+    val colors = Quark.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(colors.control)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        QIcon(Icons.Filled.Search, Modifier.size(16.dp), colors.textMuted)
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) {
+                QText("Search", Quark.type.trackSubtitle, color = colors.textMuted)
+            }
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = Quark.type.trackSubtitle.copy(color = colors.text),
+                cursorBrush = SolidColor(colors.text),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (query.isNotEmpty()) {
+            CircleButton(
+                icon = Icons.Filled.Close,
+                onClick = { onQueryChange("") },
+                diameter = 20.dp,
+                iconSize = 14.dp,
+                filled = false,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackList(
+    state: PlayerState,
+    shown: List<Track>,
+    model: PlayerUi,
+    modifier: Modifier = Modifier,
+) {
     val listState = rememberLazyListState()
-    val currentIndex = state.currentIndex
+    val currentIndex = remember(shown, state.current) { shown.indexOf(state.current) }
 
     // Follow the music: when it moves on by itself, bring it into view.
     LaunchedEffect(currentIndex) {
@@ -391,7 +506,7 @@ private fun TrackList(state: PlayerState, model: PlayerUi, modifier: Modifier = 
     }
 
     LazyColumn(modifier, state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        items(state.playlist) { track ->
+        items(shown) { track ->
             TrackRow(
                 track = track,
                 model = model,

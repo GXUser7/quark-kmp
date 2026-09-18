@@ -4,9 +4,10 @@ A Kotlin Multiplatform port of [quark](https://github.com/z3nsh0w/quark), the Fl
 audio player by PDG. The UI is Compose Multiplatform; the target is the desktop JVM on Windows,
 Linux and macOS.
 
-This is a port in progress, not a replacement yet. What runs today is the playback core —
-the domain model, the queue and the state machine above it. There is no audio backend
-wired in, so nothing comes out of the speakers.
+A port in progress, but a usable one: it plays local files and Yandex Music, follows
+synced lyrics, and looks like quark rather than like a toolkit. What is not there yet —
+system media controls, the local control API, the other sources — is listed in
+[docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## Modules
 
@@ -42,6 +43,9 @@ To run the app:
 ```bash
 ./gradlew :app:run
 ```
+
+The first run downloads libmpv (115 MB) through the `:app:fetchMpv` task rather than
+carrying it in the repository.
 
 ## Database compatibility
 

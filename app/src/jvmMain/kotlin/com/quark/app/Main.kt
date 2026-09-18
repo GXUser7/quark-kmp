@@ -28,8 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.quark.app.lyrics.LyricsScreen
+import com.quark.app.lyrics.LyricsViewModel
 import com.quark.app.player.PlayerScreen
 import com.quark.app.player.PlayerViewModel
+import com.quark.app.settings.SettingsScreen
+import com.quark.app.vibe.VibeAnimation
 import com.quark.app.theme.Quark
 import com.quark.app.theme.QuarkTheme
 import com.quark.app.ui.Backdrop
@@ -40,6 +44,9 @@ import com.quark.app.ui.backdropBackground
 import com.quark.app.yandex.YandexScreen
 import com.quark.app.yandex.YandexViewModel
 import java.awt.Frame
+
+/** Which sheet, if any, is over the player. Only one at a time. */
+private enum class Overlay { None, Yandex, Lyrics, Settings, Vibe }
 
 fun main() = application {
     val started = remember { QuarkApp.start() }
@@ -60,7 +67,8 @@ fun main() = application {
 
         val model = remember { PlayerViewModel(app) }
         val yandex = remember { YandexViewModel(app) }
-        var yandexOpen by remember { mutableStateOf(false) }
+        val lyrics = remember { LyricsViewModel(app) }
+        var overlay by remember { mutableStateOf(Overlay.None) }
         val accent by model.accent.collectAsState()
         val cover by model.cover.collectAsState()
         val state by model.state.collectAsState()
@@ -79,18 +87,44 @@ fun main() = application {
                         .fillMaxSize()
                         .backdropBackground(backdrop, colors.backgroundScrim, colors.background)
                 ) {
-                    if (state.playlist.isEmpty()) {
-                        StartScreen(model, window, onYandex = { yandexOpen = true })
-                    } else {
-                        PlayerScreen(model)
+                    // The visualiser sits under the interface, not over it.
+                    AnimatedVisibility(
+                        visible = overlay == Overlay.Vibe,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        VibeAnimation(accent, Modifier.fillMaxSize())
                     }
 
-                    AnimatedVisibility(yandexOpen, enter = fadeIn(), exit = fadeOut()) {
-                        YandexScreen(
-                            model = yandex,
-                            onClose = { yandexOpen = false },
-                            modifier = Modifier.fillMaxSize().padding(48.dp),
+                    if (state.playlist.isEmpty()) {
+                        StartScreen(
+                            model = model,
+                            owner = window,
+                            onYandex = { overlay = Overlay.Yandex },
+                            onSettings = { overlay = Overlay.Settings },
                         )
+                    } else {
+                        PlayerScreen(
+                            model = model,
+                            onOpenLyrics = { overlay = Overlay.Lyrics },
+                            onOpenVibe = {
+                                overlay = if (overlay == Overlay.Vibe) Overlay.None else Overlay.Vibe
+                            },
+                            onOpenSettings = { overlay = Overlay.Settings },
+                        )
+                    }
+
+                    val sheet = Modifier.fillMaxSize().padding(48.dp)
+                    AnimatedVisibility(overlay == Overlay.Yandex, enter = fadeIn(), exit = fadeOut()) {
+                        YandexScreen(yandex, { overlay = Overlay.None }, sheet)
+                    }
+                    AnimatedVisibility(overlay == Overlay.Lyrics, enter = fadeIn(), exit = fadeOut()) {
+                        val lyricsState by lyrics.state.collectAsState()
+                        val activeLine by lyrics.activeLine.collectAsState()
+                        LyricsScreen(lyricsState, activeLine, { overlay = Overlay.None }, sheet)
+                    }
+                    AnimatedVisibility(overlay == Overlay.Settings, enter = fadeIn(), exit = fadeOut()) {
+                        SettingsScreen(app.settings, { overlay = Overlay.None }, sheet)
                     }
                 }
             }
@@ -103,7 +137,12 @@ fun main() = application {
  * original's opening screen: a line about the player and the ways in.
  */
 @Composable
-private fun StartScreen(model: PlayerViewModel, owner: Frame?, onYandex: () -> Unit) {
+private fun StartScreen(
+    model: PlayerViewModel,
+    owner: Frame?,
+    onYandex: () -> Unit,
+    onSettings: () -> Unit,
+) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -138,6 +177,12 @@ private fun StartScreen(model: PlayerViewModel, owner: Frame?, onYandex: () -> U
             PillButton(
                 text = "Yandex Music",
                 onClick = onYandex,
+                modifier = Modifier.width(350.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            PillButton(
+                text = "Preferences",
+                onClick = onSettings,
                 modifier = Modifier.width(350.dp),
             )
         }
