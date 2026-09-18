@@ -1,5 +1,11 @@
 package com.quark.app.player
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.ImageBitmap
 import com.quark.app.QuarkApp
 import com.quark.app.image.Cover
 import com.quark.app.image.CoverLoader
@@ -38,15 +44,15 @@ sealed interface LibraryStatus {
  * `mini_player`, `macro_player` and `android_player`. Here the layouts are
  * stateless and read [state].
  */
-class PlayerViewModel(private val app: QuarkApp) {
+class PlayerViewModel(private val app: QuarkApp) : PlayerUi {
 
     private val scope = app.scope
     private val coverLoader = CoverLoader()
 
-    val state: StateFlow<PlayerState> = app.controller.state
+    override val state: StateFlow<PlayerState> = app.controller.state
 
     private val _cover = MutableStateFlow<Cover?>(null)
-    val cover: StateFlow<Cover?> = _cover.asStateFlow()
+    override val cover: StateFlow<Cover?> = _cover.asStateFlow()
 
     val accent: StateFlow<AccentColors> = MutableStateFlow(AccentColors()).also { flow ->
         _cover.map { it?.accent ?: AccentColors() }
@@ -56,11 +62,11 @@ class PlayerViewModel(private val app: QuarkApp) {
     }.asStateFlow()
 
     private val _status = MutableStateFlow<LibraryStatus>(LibraryStatus.Idle)
-    val status: StateFlow<LibraryStatus> = _status.asStateFlow()
+    override val status: StateFlow<LibraryStatus> = _status.asStateFlow()
 
     /** Position while the user is dragging, which must not fight the engine's updates. */
     private val _scrubbing = MutableStateFlow<Duration?>(null)
-    val scrubbing: StateFlow<Duration?> = _scrubbing.asStateFlow()
+    override val scrubbing: StateFlow<Duration?> = _scrubbing.asStateFlow()
 
     private var scanJob: Job? = null
 
@@ -101,46 +107,68 @@ class PlayerViewModel(private val app: QuarkApp) {
         }
     }
 
-    fun play(track: Track) = scope.launch { app.controller.play(track) }
+    /**
+     * The small cover for a list row, decoded on demand.
+     *
+     * Rows come and go as the list scrolls, so this is keyed on the track's path
+     * and the loader's cache does the rest; a track already seen comes back
+     * without touching the disk.
+     */
+    @Composable
+    override fun rememberThumbnail(track: Track): State<ImageBitmap?> {
+        val bitmap = remember(track.filepath) { mutableStateOf<ImageBitmap?>(null) }
+        LaunchedEffect(track.filepath) { bitmap.value = coverLoader.load(track)?.thumbnail }
+        return bitmap
+    }
 
-    fun playPause() = scope.launch { app.controller.playPause() }
+    override fun play(track: Track) {
+        scope.launch { app.controller.play(track) }
+    }
 
-    fun next() = scope.launch { app.controller.next() }
+    override fun playPause() {
+        scope.launch { app.controller.playPause() }
+    }
 
-    fun previous() = scope.launch { app.controller.previous() }
+    override fun next() {
+        scope.launch { app.controller.next() }
+    }
+
+    override fun previous() {
+        scope.launch { app.controller.previous() }
+    }
 
     /** Called continuously while the handle is held; does not touch the engine. */
-    fun scrub(to: Duration) {
+    override fun scrub(to: Duration) {
         _scrubbing.value = to
     }
 
     /** Called when the handle is released; this is the one that seeks. */
-    fun commitScrub() {
+    override fun commitScrub() {
         val target = _scrubbing.value ?: return
         _scrubbing.value = null
         scope.launch { app.controller.seek(target) }
     }
 
-    fun setVolume(volume: Float) = scope.launch {
+    override fun setVolume(volume: Float) { scope.launch {
         app.controller.setVolume(volume)
         app.settings.update { it.copy(playback = it.playback.copy(volume = volume)) }
-    }
+    } }
 
-    fun toggleShuffle() {
+    override fun toggleShuffle() {
         if (state.value.isShuffled) app.controller.unshuffle()
         else app.controller.shuffle(ShuffleMode.AfterCurrent)
     }
 
-    fun toggleRepeat() {
+    override fun toggleRepeat() {
         val next = if (state.value.repeat == RepeatMode.One) RepeatMode.Off else RepeatMode.One
         app.controller.setRepeat(next)
     }
 
-    fun enqueue(track: Track) = app.controller.enqueueLast(track)
+    override fun enqueue(track: Track) = app.controller.enqueueLast(track)
 
     fun enqueueNext(track: Track) = app.controller.enqueueNext(track)
 
     fun removeFromQueue(track: Track) = app.controller.removeFromQueue(track)
 
-    fun clearQueue() = app.controller.clearQueue()
+    override fun clearQueue() = app.controller.clearQueue()
 }

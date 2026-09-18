@@ -3,21 +3,21 @@ package com.quark.app
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -25,8 +25,13 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.quark.app.player.PlayerScreen
 import com.quark.app.player.PlayerViewModel
+import com.quark.app.theme.Quark
 import com.quark.app.theme.QuarkTheme
-import com.quark.core.player.PlayerState
+import com.quark.app.ui.Backdrop
+import com.quark.app.ui.LocalBackdrop
+import com.quark.app.ui.PillButton
+import com.quark.app.ui.QText
+import com.quark.app.ui.backdropBackground
 import java.awt.Frame
 
 fun main() = application {
@@ -48,62 +53,96 @@ fun main() = application {
 
         val model = remember { PlayerViewModel(app) }
         val accent by model.accent.collectAsState()
+        val cover by model.cover.collectAsState()
+        val state by model.state.collectAsState()
+        val windowSize = LocalWindowInfo.current.containerSize
 
         QuarkTheme(accent = accent) {
-            Surface(Modifier.fillMaxSize()) {
-                Column(Modifier.fillMaxSize()) {
-                    Toolbar(model, window)
-                    PlayerScreen(model, Modifier.weight(1f))
+            val colors = Quark.colors
+            val backdrop = Backdrop(
+                image = cover?.blurred,
+                windowSize = Size(windowSize.width.toFloat(), windowSize.height.toFloat()),
+            )
+
+            CompositionLocalProvider(LocalBackdrop provides backdrop) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .backdropBackground(backdrop, colors.backgroundScrim, colors.background)
+                ) {
+                    if (state.playlist.isEmpty()) {
+                        StartScreen(model, window)
+                    } else {
+                        PlayerScreen(model)
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * What the window shows before there is anything to play, matching the
+ * original's opening screen: a line about the player and the ways in.
+ */
 @Composable
-private fun Toolbar(model: PlayerViewModel, owner: Frame?) {
-    val state: PlayerState by model.state.collectAsState()
+private fun StartScreen(model: PlayerViewModel, owner: Frame?) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            QText("quark: where sound begins", Quark.type.heading)
+            Spacer(Modifier.height(14.dp))
+            QText(
+                text = "Select the folder with tracks.",
+                style = Quark.type.body.copy(textAlign = TextAlign.Center),
+                color = Quark.colors.textSecondary,
+            )
+            QText(
+                text = "You can also link your streaming account to use it.",
+                style = Quark.type.body.copy(textAlign = TextAlign.Center),
+                color = Quark.colors.textSecondary,
+            )
 
-    Row(
-        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Button(onClick = { model.open(FilePicker.pickAudioFiles(owner)) }) { Text("Add files") }
-        OutlinedButton(onClick = {
-            FilePicker.pickFolder(owner)?.let { model.open(listOf(it)) }
-        }) { Text("Add folder") }
-
-        Box(Modifier.weight(1f))
-
-        if (state.queue.isNotEmpty()) {
-            OutlinedButton(onClick = model::clearQueue) { Text("Clear queue (${state.queue.size})") }
+            Spacer(Modifier.height(28.dp))
+            PillButton(
+                text = "Add folder",
+                onClick = { FilePicker.pickFolder(owner)?.let { model.open(listOf(it)) } },
+                modifier = Modifier.width(350.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            PillButton(
+                text = "Add files",
+                onClick = { model.open(FilePicker.pickAudioFiles(owner)) },
+                modifier = Modifier.width(350.dp),
+            )
         }
     }
 }
 
 /**
  * Shown when the application cannot start at all. The common cause by far is a
- * missing libmpv, and [com.quark.player.mpv.MpvNotFoundException] already says
- * what to install, so the message is passed through rather than replaced.
+ * missing libmpv, and `MpvNotFoundException` already says what to install, so
+ * the message is passed through rather than replaced.
  */
 @Composable
 private fun StartupFailure(cause: Throwable?) {
-    Surface(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().padding(48.dp), contentAlignment = Alignment.Center) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.widthIn(max = 560.dp),
-            ) {
-                Text("quark could not start", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    text = cause?.message ?: "Unknown error.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
+    Box(
+        Modifier.fillMaxSize().padding(48.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.widthIn(max = 560.dp),
+        ) {
+            QText("quark could not start", Quark.type.heading)
+            QText(
+                text = cause?.message ?: "Unknown error.",
+                style = Quark.type.body.copy(textAlign = TextAlign.Center),
+                color = Quark.colors.textSecondary,
+            )
         }
     }
 }

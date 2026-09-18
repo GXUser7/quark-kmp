@@ -1,5 +1,6 @@
 package com.quark.app.image
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import com.quark.app.theme.AccentColors
@@ -7,15 +8,22 @@ import com.quark.core.color.AccentPalette
 import com.quark.core.model.CoverType
 import com.quark.core.model.Track
 import com.quark.data.local.TagReader
-import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image
 import java.io.File
 import java.util.Collections
 
-/** A decoded cover and the colours taken from it. */
-data class Cover(val image: ImageBitmap, val accent: AccentColors)
+/**
+ * A decoded cover: the artwork itself, the blurred wash that fills the window
+ * behind it, and the colours taken off it.
+ */
+data class Cover(
+    val image: ImageBitmap,
+    val thumbnail: ImageBitmap,
+    val blurred: ImageBitmap,
+    val accent: AccentColors,
+)
 
 /**
  * Decodes cover art and keeps a bounded number of them around.
@@ -33,12 +41,25 @@ class CoverLoader(private val capacity: Int = DEFAULT_CAPACITY) {
         }
     )
 
+    /** Tracks already known to have no artwork, so the file is not reopened. */
+    private val empty: MutableSet<String> = Collections.synchronizedSet(mutableSetOf<String>())
+
     suspend fun load(track: Track): Cover? {
         val key = track.cacheKey() ?: return null
         cache[key]?.let { return it }
+        if (key in empty) return null
 
-        val bytes = withContext(Dispatchers.IO) { readBytes(track) } ?: return null
-        val cover = withContext(Dispatchers.Default) { decode(bytes) } ?: return null
+        val bytes = withContext(Dispatchers.IO) { readBytes(track) }
+        if (bytes == null) {
+            empty += key
+            return null
+        }
+
+        val cover = withContext(Dispatchers.Default) { decode(bytes) }
+        if (cover == null) {
+            empty += key
+            return null
+        }
 
         cache[key] = cover
         return cover
@@ -55,9 +76,14 @@ class CoverLoader(private val capacity: Int = DEFAULT_CAPACITY) {
     }
 
     private fun decode(bytes: ByteArray): Cover? = try {
-        val image = Image.makeFromEncoded(bytes)
-        val bitmap = image.toComposeImageBitmap()
-        Cover(bitmap, bitmap.accentColors())
+        val decoded = Image.makeFromEncoded(bytes)
+        val bitmap = decoded.toComposeImageBitmap()
+        Cover(
+            image = bitmap,
+            thumbnail = CoverBlur.thumbnail(decoded),
+            blurred = CoverBlur.blur(decoded),
+            accent = bitmap.accentColors(),
+        )
     } catch (e: Exception) {
         null
     }
