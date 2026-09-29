@@ -33,6 +33,8 @@ data class TrackChange(val track: Track, val reason: ChangeReason)
  */
 data class PlayerState(
     val current: Track = Track.Dummy,
+    /** Cause of the most recent [current] change, updated in the same snapshot. */
+    val lastChangeReason: ChangeReason = ChangeReason.External,
     val playlist: List<Track> = emptyList(),
     val playlistInfo: PlaylistInfo = PlaylistInfo(),
     val queue: List<Track> = emptyList(),

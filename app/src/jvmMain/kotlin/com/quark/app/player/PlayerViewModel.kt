@@ -47,7 +47,7 @@ sealed interface LibraryStatus {
 class PlayerViewModel(private val app: QuarkApp) : PlayerUi {
 
     private val scope = app.scope
-    private val coverLoader = CoverLoader(app.covers)
+    private val coverLoader = CoverLoader(app.covers, app.coverColors)
 
     override val state: StateFlow<PlayerState> = app.controller.state
 
@@ -77,16 +77,22 @@ class PlayerViewModel(private val app: QuarkApp) : PlayerUi {
             .onEach { track -> _cover.value = coverLoader.load(track) }
             .launchIn(scope)
 
-        // Remember volume across restarts, as the Dart build did.
-        scope.launch {
-            app.controller.setVolume(app.settings.current.playback.volume)
-        }
     }
 
-    fun open(paths: List<File>, recursive: Boolean = true) {
+    fun open(paths: List<File>, recursive: Boolean? = null) {
+        val descend = recursive ?: app.settings.current.library.recursiveFolderAdding
+        val watchedFolders = paths
+            .filter(File::isDirectory)
+            .map { it.absoluteFile.normalize().path }
+            .distinct()
+        app.settings.update { current ->
+            current.copy(
+                library = current.library.copy(watchedFolderPaths = watchedFolders),
+            )
+        }
         scanJob?.cancel()
         scanJob = scope.launch {
-            app.scanner.scanWithProgress(paths, recursive).collect { result ->
+            app.scanner.scanWithProgress(paths, descend).collect { result ->
                 when (result) {
                     is ScanResult.Progress -> _status.value = LibraryStatus.Scanning(
                         found = result.progress.found,
@@ -98,7 +104,7 @@ class PlayerViewModel(private val app: QuarkApp) : PlayerUi {
                         _status.value = LibraryStatus.Idle
                         if (result.tracks.isEmpty()) return@collect
                         app.tracks.remember(result.tracks)
-                        app.controller.load(
+                        app.playback.open(
                             Playlist(name = paths.firstOrNull()?.name ?: "Library", tracks = result.tracks),
                         )
                     }

@@ -159,6 +159,40 @@ class PlayerControllerTest {
     }
 
     @Test
+    fun starting_another_track_clears_the_previous_duration() = runTest {
+        val engine = RecordingEngine()
+        val controller = PlayerController(engine, resolver, TestScope(testScheduler))
+        controller.load(playlist)
+        advanceUntilIdle()
+        engine.emit(EngineEvent.TotalDuration(200.seconds))
+        advanceUntilIdle()
+
+        controller.next()
+        advanceUntilIdle()
+
+        assertEquals(kotlin.time.Duration.ZERO, controller.state.value.duration)
+    }
+
+    @Test
+    fun refreshing_a_playlist_keeps_the_current_audio_and_position() = runTest {
+        val engine = RecordingEngine()
+        val controller = PlayerController(engine, resolver, TestScope(testScheduler))
+        controller.load(playlist, b)
+        advanceUntilIdle()
+        engine.emit(EngineEvent.Position(42.seconds))
+        advanceUntilIdle()
+        val renamedB = b.copy(title = "b, retagged")
+
+        controller.updatePlaylist(playlist.copy(tracks = listOf(a, renamedB, c, track("d"))))
+        advanceUntilIdle()
+
+        assertEquals(renamedB, controller.state.value.current)
+        assertEquals(42.seconds, controller.state.value.position)
+        assertEquals(1, engine.played.size)
+        assertEquals(MediaSource.LocalFile(c.filepath), engine.preloaded.last())
+    }
+
+    @Test
     fun track_changes_carry_why_they_happened() = runTest {
         val engine = RecordingEngine()
         val controller = PlayerController(engine, resolver, TestScope(testScheduler))

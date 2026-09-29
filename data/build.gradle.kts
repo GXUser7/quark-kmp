@@ -22,6 +22,7 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation("app.cash.sqldelight:sqlite-driver:2.1.0")
+            implementation("io.ktor:ktor-client-mock:3.4.0")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

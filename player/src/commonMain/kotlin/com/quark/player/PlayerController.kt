@@ -90,6 +90,37 @@ class PlayerController(
         startAt?.let { play(it) }
     }
 
+    /**
+     * Replaces a live playlist after its directory changed without reopening
+     * the audio that is already playing or losing the user's temporary queue.
+     */
+    fun updatePlaylist(playlist: Playlist) {
+        val old = _state.value
+        val replacementCurrent = playlist.tracks.firstOrNull { it.filepath == old.current.filepath }
+        val current = replacementCurrent ?: old.current
+        unshuffled = playlist.tracks
+
+        val ordered = if (old.isShuffled) {
+            val byPath = playlist.tracks.associateBy(Track::filepath)
+            val retained = old.playlist.mapNotNull { byPath[it.filepath] }
+            val retainedPaths = retained.mapTo(mutableSetOf(), Track::filepath)
+            retained + playlist.tracks.filterNot { it.filepath in retainedPaths }
+        } else {
+            playlist.tracks
+        }
+
+        queue.setPlaylist(ordered)
+        queue.setCurrent(current)
+        _state.update {
+            it.copy(
+                current = current,
+                playlist = ordered,
+                playlistInfo = PlaylistInfo.of(playlist),
+            )
+        }
+        repreload()
+    }
+
     suspend fun play(track: Track) {
         queue.playNow(track)
         start(track, ChangeReason.External)
@@ -126,7 +157,15 @@ class PlayerController(
     }
 
     private suspend fun publish(track: Track, reason: ChangeReason) {
-        _state.update { it.copy(current = track, position = Duration.ZERO, queue = queue.queue) }
+        _state.update {
+            it.copy(
+                current = track,
+                lastChangeReason = reason,
+                position = Duration.ZERO,
+                duration = Duration.ZERO,
+                queue = queue.queue,
+            )
+        }
         _trackChanges.emit(TrackChange(track, reason))
     }
 

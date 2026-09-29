@@ -65,6 +65,9 @@ data class LibrarySettings(
     /** Watch added folders and pick up files appearing in them. */
     val watchFolders: Boolean = true,
 
+    /** Roots selected through "Add folder", retained so watching survives restart. */
+    val watchedFolderPaths: List<String> = emptyList(),
+
     val logListens: Boolean = false,
 
     /** Group playlists into categories in the sidebar. */
@@ -136,4 +139,6 @@ data class PlaybackMemory(
     val lastPositionSeconds: Int = 0,
     val lastPlaylist: PlaylistId? = null,
     val lastPlaylistName: String? = null,
+    /** SQLite snapshot used to restore any source, including while offline. */
+    val lastPlaylistStorageId: Long? = null,
 )

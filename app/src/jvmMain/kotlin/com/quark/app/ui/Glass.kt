@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.quark.app.theme.Glass
+import com.quark.app.theme.Quark
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -91,6 +92,7 @@ fun GlassSurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val backdrop = LocalBackdrop.current
+    val fallback = Quark.colors.background
     var bounds by remember { mutableStateOf(Rect.Zero) }
 
     Box(
@@ -98,7 +100,12 @@ fun GlassSurface(
             .onGloballyPositioned { bounds = it.boundsInWindow() }
             .clip(shape)
             .drawBehind {
-                drawBackdrop(backdrop, bounds)
+                // With no current cover there is nothing opaque to sample. If
+                // we only draw the translucent tint, controls below a modal
+                // sheet remain sharp and readable through it. The original's
+                // BackdropFilter always supplied an opaque backdrop.
+                if (backdrop.image == null) drawRect(fallback)
+                else drawBackdrop(backdrop, bounds)
                 drawRect(glass.tint)
                 glass.brush?.let { drawRect(it) }
             }

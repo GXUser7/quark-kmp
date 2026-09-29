@@ -2,6 +2,7 @@ package com.quark.data.repository
 
 import com.quark.core.model.CoverType
 import com.quark.core.model.LocalTrack
+import com.quark.core.model.Playlist
 import com.quark.core.model.Track
 import com.quark.core.model.YandexTrack
 import com.quark.data.db.DatabaseFactory
@@ -30,6 +31,7 @@ class RepositoryTest {
     private lateinit var tracks: TrackRepository
     private lateinit var playlists: PlaylistRepository
     private lateinit var stats: ListenStatsRepository
+    private lateinit var coverColors: CoverColorRepository
 
     @BeforeTest
     fun setUp() {
@@ -37,6 +39,7 @@ class RepositoryTest {
         tracks = TrackRepository(db, Dispatchers.Unconfined)
         playlists = PlaylistRepository(db, Dispatchers.Unconfined)
         stats = ListenStatsRepository(db, Dispatchers.Unconfined)
+        coverColors = CoverColorRepository(db, Dispatchers.Unconfined)
     }
 
     @Test
@@ -97,6 +100,20 @@ class RepositoryTest {
     }
 
     @Test
+    fun saving_a_snapshot_replaces_the_same_playlist_atomically() = runTest {
+        val first = Playlist(name = "Animals", tracks = listOf(local("dogs"), local("sheep")))
+        val id = playlists.saveSnapshot(first)
+
+        val replacement = Playlist(name = "Animals remastered", tracks = listOf(local("pigs")))
+        val sameId = playlists.saveSnapshot(replacement, existingId = id)
+
+        assertEquals(id, sameId)
+        assertEquals(1, playlists.all().size)
+        assertEquals("Animals remastered", assertNotNull(playlists.byId(id)).title)
+        assertEquals(listOf("pigs"), playlists.tracksOf(id).map(Track::title))
+    }
+
+    @Test
     fun deleting_a_playlist_takes_its_entries_but_leaves_the_tracks() = runTest {
         val id = playlists.create("Temp")
         playlists.addTracks(id, listOf(local("dogs")))
@@ -113,6 +130,18 @@ class RepositoryTest {
         playlists.rename(id, "Animals")
 
         assertEquals("Animals", assertNotNull(playlists.byId(id)).title)
+    }
+
+    @Test
+    fun cover_colors_round_trip_signed_argb_and_replace_old_values() = runTest {
+        val first = listOf(0xFF102030.toInt(), 0xFF405060.toInt(), 0xFF708090.toInt())
+        coverColors.put("deadbeef", first)
+        assertEquals(first, coverColors.get("deadbeef"))
+
+        val replacement = listOf(0xFFFFFFFF.toInt())
+        coverColors.put("deadbeef", replacement)
+        assertEquals(replacement, coverColors.get("deadbeef"))
+        assertNull(coverColors.get("missing"))
     }
 
     @Test

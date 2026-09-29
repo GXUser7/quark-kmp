@@ -9,10 +9,12 @@ import com.quark.core.model.CoverType
 import com.quark.core.model.Track
 import com.quark.data.images.CoverCache
 import com.quark.data.local.TagReader
+import com.quark.data.repository.CoverColorRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image
 import java.io.File
+import java.security.MessageDigest
 import java.util.Collections
 
 /**
@@ -35,6 +37,7 @@ data class Cover(
  */
 class CoverLoader(
     private val remote: CoverCache? = null,
+    private val palettes: CoverColorRepository? = null,
     private val capacity: Int = DEFAULT_CAPACITY,
 ) {
 
@@ -59,7 +62,7 @@ class CoverLoader(
             return null
         }
 
-        val cover = withContext(Dispatchers.Default) { decode(bytes) }
+        val cover = decode(bytes)
         if (cover == null) {
             empty += key
             return null
@@ -85,17 +88,41 @@ class CoverLoader(
         CoverType.NoCover -> null
     }
 
-    private fun decode(bytes: ByteArray): Cover? = try {
-        val decoded = Image.makeFromEncoded(bytes)
-        val bitmap = decoded.toComposeImageBitmap()
-        Cover(
-            image = bitmap,
-            thumbnail = CoverBlur.thumbnail(decoded),
-            blurred = CoverBlur.blur(decoded),
-            accent = bitmap.accentColors(),
-        )
-    } catch (e: Exception) {
-        null
+    private suspend fun decode(bytes: ByteArray): Cover? {
+        val hash = bytes.md5()
+        val stored = try {
+            palettes?.get(hash)?.takeIf { it.size >= AccentPalette.ZONES }
+        } catch (_: Exception) {
+            null
+        }
+
+        val decoded = withContext(Dispatchers.Default) {
+            try {
+                val image = Image.makeFromEncoded(bytes)
+                val bitmap = image.toComposeImageBitmap()
+                val colors = stored ?: bitmap.accentPalette()
+                DecodedCover(
+                    cover = Cover(
+                        image = bitmap,
+                        thumbnail = CoverBlur.thumbnail(image),
+                        blurred = CoverBlur.blur(image),
+                        accent = colors.toAccentColors(),
+                    ),
+                    calculatedColors = colors.takeIf { stored == null },
+                )
+            } catch (_: Exception) {
+                null
+            }
+        } ?: return null
+
+        decoded.calculatedColors?.takeIf { it.size >= AccentPalette.ZONES }?.let { colors ->
+            try {
+                palettes?.put(hash, colors)
+            } catch (_: Exception) {
+                // A cache write must never make an otherwise valid cover vanish.
+            }
+        }
+        return decoded.cover
     }
 
     private fun Track.cacheKey(): String? = when (coverType) {
@@ -107,6 +134,11 @@ class CoverLoader(
     private companion object {
         const val DEFAULT_CAPACITY = 64
     }
+
+    private data class DecodedCover(
+        val cover: Cover,
+        val calculatedColors: List<Int>?,
+    )
 }
 
 /**
@@ -114,16 +146,30 @@ class CoverLoader(
  * downscaled copy would be cheaper, but covers are at most a few megapixels and
  * this runs once per track, not per frame.
  */
-private fun ImageBitmap.accentColors(): AccentColors {
+private fun ImageBitmap.accentPalette(): List<Int> {
     val pixels = IntArray(width * height)
     readPixels(pixels)
+    return AccentPalette.extract(pixels, width, height)
+}
 
-    val extracted = AccentPalette.extract(pixels, width, height)
-    if (extracted.size < AccentPalette.ZONES) return AccentColors()
+private fun List<Int>.toAccentColors(): AccentColors {
+    if (size < AccentPalette.ZONES) return AccentColors()
 
     return AccentColors(
-        primary = Color(extracted[0]),
-        secondary = Color(extracted[1]),
-        tertiary = Color(extracted[2]),
+        primary = Color(this[0]),
+        secondary = Color(this[1]),
+        tertiary = Color(this[2]),
     )
+}
+
+private fun ByteArray.md5(): String {
+    val digest = MessageDigest.getInstance("MD5").digest(this)
+    val alphabet = "0123456789abcdef"
+    return buildString(digest.size * 2) {
+        for (byte in digest) {
+            val value = byte.toInt() and 0xFF
+            append(alphabet[value ushr 4])
+            append(alphabet[value and 0x0F])
+        }
+    }
 }

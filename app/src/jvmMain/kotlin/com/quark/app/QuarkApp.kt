@@ -1,12 +1,19 @@
 package com.quark.app
 
 import com.quark.app.yandex.YandexSession
+import com.quark.app.player.PlaybackSession
+import com.quark.app.player.TrackCacheCoordinator
+import com.quark.app.player.LibraryWatcher
+import com.quark.app.stats.ListenLogger
 import com.quark.core.settings.SettingsStore
 import com.quark.data.db.DatabaseFactory
 import com.quark.data.db.QuarkDatabase
 import com.quark.data.images.CoverCache
 import com.quark.data.local.LibraryScanner
+import com.quark.data.local.DirectoryObserver
+import com.quark.data.net.TrackCacher
 import com.quark.data.repository.ListenStatsRepository
+import com.quark.data.repository.CoverColorRepository
 import com.quark.data.repository.PlaylistRepository
 import com.quark.data.repository.TrackRepository
 import com.quark.data.settings.JsonSettingsStore
@@ -37,12 +44,21 @@ class QuarkApp private constructor(
     val listenStats: ListenStatsRepository,
     val scanner: LibraryScanner,
     val covers: CoverCache,
+    val coverColors: CoverColorRepository,
     val yandex: YandexSession,
     private val engine: AudioEngine,
     val controller: PlayerController,
+    val playback: PlaybackSession,
+    private val listenLogger: ListenLogger,
+    private val trackCache: TrackCacheCoordinator,
+    private val libraryWatcher: LibraryWatcher,
 ) {
     fun shutdown() {
         runBlocking {
+            libraryWatcher.close()
+            playback.close()
+            listenLogger.close()
+            trackCache.close()
             controller.release()
             settings.close()
         }
@@ -63,21 +79,55 @@ class QuarkApp private constructor(
 
             val yandex = YandexSession(settings, scope, http)
             val engine = MpvAudioEngine()
-            val controller = PlayerController(engine, QuarkSourceResolver(yandex), scope)
+            val resolver = QuarkSourceResolver(yandex)
+            val controller = PlayerController(engine, resolver, scope)
+            val tracks = TrackRepository(database, Dispatchers.IO)
+            val playlists = PlaylistRepository(database, Dispatchers.IO)
+            val listenStats = ListenStatsRepository(database, Dispatchers.IO)
+            val coverColors = CoverColorRepository(database, Dispatchers.IO)
+            val playback = PlaybackSession(controller, settings, playlists, scope)
+            val listenLogger = ListenLogger(controller, settings, listenStats, scope)
+            val trackCache = TrackCacheCoordinator(
+                controller = controller,
+                settings = settings,
+                cacher = TrackCacher(http),
+                resolver = resolver,
+                scope = scope,
+            )
+            val scanner = LibraryScanner()
+            val libraryWatcher = LibraryWatcher(
+                controller = controller,
+                settings = settings,
+                scanner = scanner,
+                tracks = tracks,
+                playback = playback,
+                observer = DirectoryObserver(),
+                scope = scope,
+            )
 
             QuarkApp(
                 scope = scope,
                 settings = settings,
                 database = database,
-                tracks = TrackRepository(database, Dispatchers.IO),
-                playlists = PlaylistRepository(database, Dispatchers.IO),
-                listenStats = ListenStatsRepository(database, Dispatchers.IO),
-                scanner = LibraryScanner(),
+                tracks = tracks,
+                playlists = playlists,
+                listenStats = listenStats,
+                scanner = scanner,
                 covers = CoverCache(AppDirs.coverCache, http),
+                coverColors = coverColors,
                 yandex = yandex,
                 engine = engine,
                 controller = controller,
-            )
+                playback = playback,
+                listenLogger = listenLogger,
+                trackCache = trackCache,
+                libraryWatcher = libraryWatcher,
+            ).also {
+                listenLogger.start()
+                playback.start()
+                trackCache.start()
+                libraryWatcher.start()
+            }
         }
     }
 }

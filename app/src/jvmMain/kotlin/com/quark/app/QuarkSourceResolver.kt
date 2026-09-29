@@ -6,6 +6,7 @@ import com.quark.core.model.Track
 import com.quark.core.model.YandexTrack
 import com.quark.core.model.YtMusicTrack
 import com.quark.core.util.TimedCache
+import com.quark.data.net.DownloadSource
 import com.quark.player.MediaSource
 import com.quark.player.SourceResolver
 import kotlinx.coroutines.sync.Mutex
@@ -32,27 +33,27 @@ class QuarkSourceResolver(
 
     override suspend fun resolve(track: Track): MediaSource = when (track) {
         is LocalTrack -> MediaSource.LocalFile(track.filepath)
-        is YandexTrack -> resolveYandex(track)
-        is YtMusicTrack -> resolveYtMusic(track)
+        else -> downloadedFile(track) ?: downloadSource(track)?.let {
+            MediaSource.Network(it.url, it.headers)
+        } ?: error("No remote source for ${track.filepath}")
     }
 
-    private suspend fun resolveYandex(track: YandexTrack): MediaSource {
-        downloadedFile(track)?.let { return it }
-
-        val api = yandex.api ?: error("Not signed in to Yandex Music")
-        val url = lock.withLock {
-            urls.getOrPut(track.trackId) { api.downloadUrl(it, yandex.quality) }
+    /** Resolves a fresh network request even when a cached file already exists. */
+    suspend fun downloadSource(track: Track): DownloadSource? = when (track) {
+        is LocalTrack -> null
+        is YandexTrack -> {
+            val api = yandex.api ?: error("Not signed in to Yandex Music")
+            val url = lock.withLock {
+                urls.getOrPut(track.trackId) { api.downloadUrl(it, yandex.quality) }
+            }
+            DownloadSource(url)
         }
-        return MediaSource.Network(url)
-    }
-
-    private suspend fun resolveYtMusic(track: YtMusicTrack): MediaSource {
-        downloadedFile(track)?.let { return it }
-
-        val url = track.streamUrl ?: error("No stream url for ${track.videoId}")
-        // The backend hands out urls that only work for a client claiming to be
-        // the Android app, which is the user agent the Dart build sent too.
-        return MediaSource.Network(url, mapOf("User-Agent" to YOUTUBE_USER_AGENT))
+        is YtMusicTrack -> {
+            val url = track.streamUrl ?: error("No stream url for ${track.videoId}")
+            // The backend hands out urls that only work for a client claiming
+            // to be the Android app, as in the Dart build.
+            DownloadSource(url, mapOf("User-Agent" to YOUTUBE_USER_AGENT))
+        }
     }
 
     /** A remote track whose file is already cached plays from there. */

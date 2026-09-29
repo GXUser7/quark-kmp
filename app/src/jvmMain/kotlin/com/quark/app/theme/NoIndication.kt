@@ -12,9 +12,11 @@ import androidx.compose.ui.Modifier
  * the default ripple would draw Material's circle on top of every one of them.
  */
 object NoIndication : IndicationNodeFactory {
-    private object Node : Modifier.Node()
-
-    override fun create(interactionSource: InteractionSource): DelegatableNode = Node
+    // A Modifier.Node can belong to only one modifier chain. Indications are
+    // created lazily on the first pointer event, so sharing one node appeared
+    // to work until a second clickable was hovered after opening a sheet.
+    override fun create(interactionSource: InteractionSource): DelegatableNode =
+        object : Modifier.Node() {}
 
     override fun hashCode(): Int = -1
 

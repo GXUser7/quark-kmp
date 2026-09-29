@@ -2,7 +2,9 @@ package com.quark.data.repository
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
+import com.quark.core.model.Playlist
 import com.quark.core.model.Track
+import com.quark.core.model.TrackSource
 import com.quark.data.db.Playlists
 import com.quark.data.db.QuarkDatabase
 import kotlinx.coroutines.CoroutineDispatcher
@@ -71,21 +73,27 @@ class PlaylistRepository(
     suspend fun addTracks(playlistId: Long, tracks: List<Track>) = withContext(io) {
         if (tracks.isEmpty()) return@withContext
         queries.transaction {
-            for (track in tracks) {
-                trackQueries.insertOrIgnore(
-                    path = track.filepath,
-                    title = track.title,
-                    artists = track.artists.joinArtists(),
-                    album = track.albumLine,
-                    cover_url = track.coverUrl,
-                    source = track.source.value,
-                    sourceid = track.sourceId,
-                    downloaded = true,
-                )
-                val trackId = trackQueries.selectByPath(track.filepath).executeAsOneOrNull()?.id
-                    ?: return@transaction
-                queries.appendTrack(playlistId, trackId, playlistId)
-            }
+            appendTracks(playlistId, tracks)
+        }
+    }
+
+    /**
+     * Stores a complete playlist for startup restoration. When [existingId]
+     * still exists it is replaced atomically; otherwise a new row is created.
+     */
+    suspend fun saveSnapshot(playlist: Playlist, existingId: Long? = null): Long = withContext(io) {
+        queries.transactionWithResult {
+            val playlistId = existingId
+                ?.takeIf { queries.selectById(it).executeAsOneOrNull() != null }
+                ?: run {
+                    queries.create(playlist.name)
+                    trackQueries.lastInsertedId().executeAsOne()
+                }
+
+            queries.rename(playlist.name, playlistId)
+            queries.deleteTracksOf(playlistId)
+            appendTracks(playlistId, playlist.tracks)
+            playlistId
         }
     }
 
@@ -95,6 +103,26 @@ class PlaylistRepository(
 
     suspend fun size(playlistId: Long): Long = withContext(io) {
         queries.countTracksOf(playlistId).executeAsOne()
+    }
+
+    private fun appendTracks(playlistId: Long, tracks: List<Track>) {
+        for (track in tracks) {
+            // Rescans may discover edited tags at the same path. Upsert keeps
+            // the persisted snapshot in step with what the UI just read.
+            trackQueries.upsert(
+                path = track.filepath,
+                title = track.title,
+                artists = track.artists.joinArtists(),
+                album = track.albumLine,
+                cover_url = track.coverUrl,
+                source = track.source.value,
+                sourceid = track.sourceId,
+                downloaded = track.source == TrackSource.Local,
+            )
+            val trackId = trackQueries.selectByPath(track.filepath).executeAsOneOrNull()?.id
+                ?: continue
+            queries.appendTrack(playlistId, trackId, playlistId)
+        }
     }
 }
 

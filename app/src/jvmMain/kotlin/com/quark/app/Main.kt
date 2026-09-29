@@ -1,5 +1,6 @@
 package com.quark.app
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -115,19 +117,33 @@ fun main() = application {
                     }
 
                     val sheet = Modifier.fillMaxSize().padding(48.dp)
-                    AnimatedVisibility(overlay == Overlay.Yandex, enter = fadeIn(), exit = fadeOut()) {
+                    ModalSheet(overlay == Overlay.Yandex) {
                         YandexScreen(yandex, { overlay = Overlay.None }, sheet)
                     }
-                    AnimatedVisibility(overlay == Overlay.Lyrics, enter = fadeIn(), exit = fadeOut()) {
+                    ModalSheet(overlay == Overlay.Lyrics) {
                         val lyricsState by lyrics.state.collectAsState()
                         val activeLine by lyrics.activeLine.collectAsState()
                         LyricsScreen(lyricsState, activeLine, { overlay = Overlay.None }, sheet)
                     }
-                    AnimatedVisibility(overlay == Overlay.Settings, enter = fadeIn(), exit = fadeOut()) {
+                    ModalSheet(overlay == Overlay.Settings) {
                         SettingsScreen(app.settings, { overlay = Overlay.None }, sheet)
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The Flutter sheets dim everything below them before drawing their glass
+ * surface (`main_player.dart:1329-1333`). Keeping that scrim in one host also
+ * prevents new sheets from accidentally getting a transparent modal backdrop.
+ */
+@Composable
+private fun ModalSheet(visible: Boolean, content: @Composable () -> Unit) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f))) {
+            content()
         }
     }
 }

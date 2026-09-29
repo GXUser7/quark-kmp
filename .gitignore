@@ -1,10 +1,22 @@
 .gradle/
+.kotlin/
 build/
 */build/
 local.properties
 .idea/
+.fleet/
+.vscode/
 *.iml
 .DS_Store
+Thumbs.db
+
+# Local configuration and diagnostics.
+.env
+.env.*
+!.env.example
+*.log
+*.hprof
+hs_err_pid*
 
 # Fetched by the :app:fetchMpv task, 115 MB.
 app/resources/*/libmpv-2.dll

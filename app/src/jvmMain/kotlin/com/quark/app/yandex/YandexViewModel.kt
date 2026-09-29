@@ -116,7 +116,7 @@ class YandexViewModel(private val app: QuarkApp) {
                 }
 
                 app.tracks.remember(tracks, downloaded = false)
-                app.controller.load(
+                app.playback.open(
                     Playlist(
                         id = PlaylistId(summary.ownerUid, summary.kind, PlaylistSource.YandexMusic),
                         name = summary.title,
