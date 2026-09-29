@@ -74,7 +74,9 @@ class JsonSettingsStore(
         val temp = file.resolveSibling("${file.fileName}.tmp")
         try {
             Files.createDirectories(file.parent)
-            Files.writeString(temp, json.encodeToString(Settings.serializer(), settings))
+            // Files.write rather than writeString: the latter is Java 11, and
+            // Android only has it from API 33.
+            Files.write(temp, json.encodeToString(Settings.serializer(), settings).encodeToByteArray())
             // Replace in one step: a crash here leaves the old file intact, never a half-written one.
             Files.move(
                 temp,

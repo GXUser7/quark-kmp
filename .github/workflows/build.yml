@@ -27,7 +27,10 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       - name: Test
-        run: ./gradlew jvmTest --continue --stacktrace
+        run: ./gradlew jvmTest --continue 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Errors
+        if: failure()
+        run: grep -E "^e: |^w: .*error|What went wrong|FAILED|> " -A2 build.log | head -150
       - name: Test reports
         if: failure()
         uses: actions/upload-artifact@v4
@@ -60,7 +63,10 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/quark.jks"
           echo "QUARK_KEYSTORE_FILE=$RUNNER_TEMP/quark.jks" >> "$GITHUB_ENV"
       - name: Build
-        run: ./gradlew :androidApp:assembleRelease :androidApp:assembleDebug --stacktrace
+        run: ./gradlew :androidApp:assembleRelease :androidApp:assembleDebug 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Errors
+        if: failure()
+        run: grep -E "^e: |ERROR:|What went wrong|Missing class|> " -A2 build.log | head -150
       - name: Collect
         run: |
           mkdir -p dist
@@ -86,7 +92,10 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       - name: Package
-        run: ./gradlew :app:packageMsi :app:packageExe :app:createDistributable --stacktrace
+        run: ./gradlew :app:packageMsi :app:packageExe :app:createDistributable 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Errors
+        if: failure()
+        run: grep -E "^e: |ERROR:|What went wrong|> " -A2 build.log | head -150
       - name: Collect
         shell: pwsh
         run: |

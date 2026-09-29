@@ -16,6 +16,9 @@ kotlin {
         commonMain.dependencies {
             api(project(":core"))
             api(libs.ktor.client.core)
+            // CIO for the quark backend, whose search and song endpoints take a
+            // json body on GET — OkHttp refuses to send one.
+            implementation(libs.ktor.client.cio)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.kotlinx.coroutines.core)

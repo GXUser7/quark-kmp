@@ -53,15 +53,47 @@ class YandexClient(
         parameters: Map<String, Any?> = emptyMap(),
         body: JsonElement? = null,
         headers: Map<String, String> = emptyMap(),
+        form: Map<String, String>? = null,
     ): JsonElement = request(path) {
         http.post(url(path)) {
             applyHeaders(headers)
             parameters.forEach { (name, value) -> value?.let { parameter(name, it) } }
-            if (body != null) {
-                contentType(ContentType.Application.Json)
-                setBody(body)
+            when {
+                form != null -> setBody(
+                    io.ktor.client.request.forms.FormDataContent(
+                        io.ktor.http.Parameters.build { form.forEach { (name, value) -> append(name, value) } }
+                    )
+                )
+                body != null -> {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             }
         }
+    }
+
+    /**
+     * Sends [bytes] as a multipart upload to [url], which Yandex hands out per
+     * file. The target is on another host and takes no api headers.
+     */
+    suspend fun uploadMultipart(url: String, fileName: String, bytes: ByteArray): String {
+        val response = http.post(url) {
+            setBody(
+                io.ktor.client.request.forms.MultiPartFormDataContent(
+                    io.ktor.client.request.forms.formData {
+                        append(
+                            "file",
+                            bytes,
+                            io.ktor.http.Headers.build {
+                                append(io.ktor.http.HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                            },
+                        )
+                    }
+                )
+            )
+        }
+        if (!response.status.isSuccess()) throw response.toException(url)
+        return response.bodyAsText()
     }
 
     /** Fetches something outside the api host, such as a signed lyrics file. */

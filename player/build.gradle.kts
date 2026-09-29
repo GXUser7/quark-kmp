@@ -21,6 +21,8 @@ kotlin {
         }
         androidMain.dependencies {
             api(libs.media3.exoplayer)
+            // VK and some SoundCloud tracks only come as HLS playlists.
+            implementation(libs.media3.hls)
             implementation(libs.androidx.annotation)
             implementation(libs.kotlinx.coroutines.android)
         }

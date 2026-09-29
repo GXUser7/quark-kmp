@@ -2,8 +2,13 @@ package com.quark.network.yandex
 
 import com.quark.network.yandex.dto.AccountStatusDto
 import com.quark.network.yandex.dto.AlbumDto
+import com.quark.network.yandex.dto.ArtistBriefDto
 import com.quark.network.yandex.dto.ArtistDto
+import com.quark.network.yandex.dto.ChartItemDto
 import com.quark.network.yandex.dto.DownloadInfoDto
+import com.quark.network.yandex.dto.LibraryDto
+import com.quark.network.yandex.dto.TrackRefDto
+import com.quark.network.yandex.dto.UploadTargetDto
 import com.quark.network.yandex.dto.LyricsDto
 import com.quark.network.yandex.dto.PlaylistDto
 import com.quark.network.yandex.dto.RotorBatchDto
@@ -62,14 +67,172 @@ class YandexMusic(private val client: YandexClient) {
     suspend fun playlist(kind: Long, userId: Long = client.userId): PlaylistDto =
         decode(client.get("/users/$userId/playlists/$kind"), PlaylistDto.serializer())
 
+    /**
+     * Every playlist of the user with "Liked" first, as the Dart build listed
+     * them (`getPlaylistsWithLikes`): the kinds come from one call, the
+     * playlists themselves from a second, without their tracks.
+     */
+    suspend fun playlistsWithLikes(userId: Long = client.userId): List<PlaylistDto> {
+        val kinds = client.get(
+            "/users/$userId/playlists/list/kinds",
+            mapOf("addPlaylistWithLikes" to true),
+        )
+        val list = (kinds as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: return userPlaylists(userId)
+        if (list.isEmpty()) return emptyList()
+        val playlists = decodeList(
+            client.get(
+                "/users/$userId/playlists",
+                mapOf("kinds" to list.joinToString(","), "mixed" to true, "rich-tracks" to false),
+            ),
+            PlaylistDto.serializer(),
+        )
+        return playlists.sortedByDescending { it.isLikes }
+    }
+
     /** The "Liked" pseudo-playlist, which is a plain track id list. */
-    suspend fun likedTrackIds(userId: Long = client.userId): List<String> {
-        val library = client.get("/users/$userId/likes/tracks") as? JsonObject
-            ?: throw YandexException.Unexpected("likes/tracks: not an object")
-        return library["library"]?.let { it as? JsonObject }
-            ?.get("tracks")?.jsonArray
-            ?.mapNotNull { (it as? JsonObject)?.get("id")?.asString() }
-            .orEmpty()
+    suspend fun likedTrackIds(userId: Long = client.userId): List<String> =
+        likedTracks(userId).map(TrackRefDto::id)
+
+    /** Liked tracks as the library keeps them, newest first. */
+    suspend fun likedTracks(userId: Long = client.userId): List<TrackRefDto> =
+        decode(client.get("/users/$userId/likes/tracks"), LibraryDto.serializer()).library.tracks
+
+    suspend fun dislikedTracks(userId: Long = client.userId): List<TrackRefDto> =
+        decode(client.get("/users/$userId/dislikes/tracks"), LibraryDto.serializer()).library.tracks
+
+    /** Likes [trackIds]; a track already liked moves to the top. */
+    suspend fun like(trackIds: List<String>, userId: Long = client.userId) {
+        client.post(
+            "/users/$userId/likes/tracks/add-multiple",
+            parameters = mapOf("track-ids" to trackIds.joinToString(",")),
+        )
+    }
+
+    suspend fun unlike(trackIds: List<String>, userId: Long = client.userId) {
+        client.post(
+            "/users/$userId/likes/tracks/remove",
+            parameters = mapOf("track-ids" to trackIds.joinToString(",")),
+        )
+    }
+
+    /** Keeps the track out of recommendations, My Vibe included. */
+    suspend fun dislike(trackId: String, userId: Long = client.userId) {
+        client.post("/users/$userId/dislikes/tracks/add", parameters = mapOf("track-id" to trackId))
+    }
+
+    suspend fun undislike(trackId: String, userId: Long = client.userId) {
+        client.post(
+            "/users/$userId/dislikes/tracks/$trackId/remove",
+            parameters = mapOf("track-id" to trackId),
+        )
+    }
+
+    // --- Editing playlists -----------------------------------------------------
+
+    suspend fun createPlaylist(
+        title: String,
+        public: Boolean = false,
+        userId: Long = client.userId,
+    ): PlaylistDto = decode(
+        client.post(
+            "/users/$userId/playlists/create",
+            parameters = mapOf("title" to title, "visibility" to if (public) "public" else "private"),
+        ),
+        PlaylistDto.serializer(),
+    )
+
+    suspend fun renamePlaylist(kind: Long, title: String, userId: Long = client.userId): PlaylistDto =
+        decode(
+            client.post("/users/$userId/playlists/$kind/name", parameters = mapOf("value" to title)),
+            PlaylistDto.serializer(),
+        )
+
+    suspend fun deletePlaylist(kind: Long, userId: Long = client.userId) {
+        client.post("/users/$userId/playlists/$kind/delete")
+    }
+
+    /**
+     * Inserts tracks at [at]. Playlists are edited by diff against a revision,
+     * so a stale [revision] is refused rather than silently merged — the caller
+     * re-reads the playlist and tries again.
+     */
+    suspend fun insertTracks(
+        kind: Long,
+        revision: Int,
+        tracks: List<Pair<String, Long?>>,
+        at: Int = 0,
+        userId: Long = client.userId,
+    ): PlaylistDto {
+        val diff = buildJsonArray {
+            add(buildJsonObject {
+                put("op", "insert")
+                put("at", at)
+                put("tracks", buildJsonArray {
+                    tracks.forEach { (id, albumId) ->
+                        add(buildJsonObject {
+                            put("id", id)
+                            albumId?.let { put("albumId", it) }
+                        })
+                    }
+                })
+            })
+        }
+        return changePlaylist(kind, revision, diff.toString(), userId)
+    }
+
+    /** Removes the entries from [from] up to, not including, [to]. */
+    suspend fun deleteTracks(
+        kind: Long,
+        revision: Int,
+        from: Int,
+        to: Int,
+        userId: Long = client.userId,
+    ): PlaylistDto {
+        val diff = buildJsonArray {
+            add(buildJsonObject {
+                put("op", "delete")
+                put("from", from)
+                put("to", to)
+            })
+        }
+        return changePlaylist(kind, revision, diff.toString(), userId)
+    }
+
+    private suspend fun changePlaylist(kind: Long, revision: Int, diff: String, userId: Long): PlaylistDto {
+        val fields = mapOf("kind" to kind.toString(), "revision" to revision.toString(), "diff" to diff)
+        return decode(
+            client.post(
+                "/users/$userId/playlists/$kind/change-relative",
+                parameters = fields,
+                form = fields,
+            ),
+            PlaylistDto.serializer(),
+        )
+    }
+
+    // --- Uploads ---------------------------------------------------------------
+
+    /**
+     * Uploads a file of the user's own into playlist [kind] and returns the new
+     * track's id. Yandex hands out a one-off target per file; the track shows
+     * up once its servers have transcoded it, which can take a minute.
+     */
+    suspend fun uploadTrack(
+        kind: Long,
+        fileName: String,
+        bytes: ByteArray,
+        userId: Long = client.userId,
+    ): String {
+        val target = decode(
+            client.post(
+                "/loader/upload-url",
+                parameters = mapOf("uid" to userId, "playlist-id" to "$userId:$kind", "path" to fileName),
+            ),
+            UploadTargetDto.serializer(),
+        )
+        if (target.postTarget.isEmpty()) throw YandexException.Unexpected("loader/upload-url: no target")
+        client.uploadMultipart(target.postTarget, fileName, bytes)
+        return target.trackId
     }
 
     // --- Tracks --------------------------------------------------------------
@@ -147,6 +310,36 @@ class YandexMusic(private val client: YandexClient) {
     )
 
     suspend fun artist(id: Long): JsonElement = client.get("/artists/$id/brief-info")
+
+    /** The artist page in one call: popular tracks, albums, similar artists. */
+    suspend fun artistBrief(id: Long): ArtistBriefDto =
+        decode(client.get("/artists/$id/brief-info"), ArtistBriefDto.serializer())
+
+    /** Several albums at once, without their tracks. */
+    suspend fun albums(ids: List<Long>): List<AlbumDto> {
+        if (ids.isEmpty()) return emptyList()
+        return decodeList(
+            client.post("/albums", parameters = mapOf("album-ids" to ids.joinToString(","))),
+            AlbumDto.serializer(),
+        )
+    }
+
+    /** Yandex's own chart, as the landing page shows it. */
+    suspend fun chart(): List<TrackDto> {
+        val result = client.get("/landing3/chart") as? JsonObject ?: return emptyList()
+        val tracks = (result["chart"] as? JsonObject)?.get("tracks") ?: return emptyList()
+        return decodeList(tracks, ChartItemDto.serializer()).mapNotNull { it.track }
+    }
+
+    /** Recently released albums picked for the listener. */
+    suspend fun newReleases(limit: Int = 30): List<AlbumDto> {
+        val result = client.get("/landing3/new-releases") as? JsonObject ?: return emptyList()
+        val ids = (result["newReleases"] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.content?.toLongOrNull() }
+            .orEmpty()
+            .take(limit)
+        return albums(ids)
+    }
 
     suspend fun artistTracks(id: Long, page: Int = 0, pageSize: Int = 50): List<TrackDto> {
         val result = client.get(
