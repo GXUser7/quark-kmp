@@ -34,6 +34,7 @@ data class ArtistDto(
     val cover: CoverDto? = null,
     val genres: List<String> = emptyList(),
     val counts: ArtistCountsDto? = null,
+    val likesCount: Int? = null,
 ) {
     fun coverUrl(size: String = "300x300"): String? =
         cover?.uri?.let { "https://${it.replace("%%", size)}" }
@@ -98,6 +99,12 @@ data class ArtistBriefDto(
     val similarArtists: List<ArtistDto> = emptyList(),
     val lastReleases: List<AlbumDto> = emptyList(),
     val playlists: List<PlaylistDto> = emptyList(),
+    val stats: ArtistStatsDto? = null,
+)
+
+@Serializable
+data class ArtistStatsDto(
+    val lastMonthListeners: Int = 0,
 )
 
 @Serializable

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quark.app.i18n.strings
 import com.quark.app.theme.Glass
 import com.quark.app.theme.Quark
 import com.quark.app.theme.Radius
@@ -60,7 +61,7 @@ fun LyricsScreen(
     ) {
         Column(Modifier.fillMaxSize().padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                QText("Lyrics", Quark.type.panelTitle, Modifier.weight(1f))
+                QText(strings.lyrics, Quark.type.panelTitle, Modifier.weight(1f))
                 CircleButton(
                     icon = Icons.Filled.Close,
                     onClick = onClose,
@@ -75,9 +76,9 @@ fun LyricsScreen(
 
             when (val current = state) {
                 is LyricsState.Ready -> LyricsBody(current, active)
-                LyricsState.Loading -> Message("Loading…")
+                LyricsState.Loading -> Message(strings.lyricsLoading)
                 is LyricsState.Unavailable -> Message(current.reason)
-                LyricsState.Idle -> Message("Nothing playing.")
+                LyricsState.Idle -> Message(strings.nothingPlaying)
             }
         }
     }

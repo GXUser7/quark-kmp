@@ -29,6 +29,10 @@ data class TrackCollection(
     val yandexRevision: Int? = null,
     /** An album's artists, which the header links to. */
     val artistIds: List<Pair<Long, String>> = emptyList(),
+    /** Where the collection lives on its service, for "Copy link". */
+    val link: String? = null,
+    /** Whether an own Yandex playlist is public; null where that means nothing. */
+    val isPublic: Boolean? = null,
 ) {
     val source: PlaylistSource get() = playlistId.source
     val isEditable: Boolean get() = userPlaylistId != null
@@ -58,7 +62,14 @@ data class ArtistPage(
     val albums: List<CollectionSummary>,
     val alsoAlbums: List<CollectionSummary>,
     val similar: List<ArtistSummary>,
+    val playlists: List<CollectionSummary> = emptyList(),
+    val likes: Int? = null,
+    val monthlyListeners: Int? = null,
+    val link: String? = null,
 )
+
+/** One of the user's own playlists on a service, as an "Add to…" menu lists it. */
+data class EditablePlaylist(val kind: Long, val title: String)
 
 data class ArtistSummary(val id: Long, val name: String, val coverUrl: String?)
 

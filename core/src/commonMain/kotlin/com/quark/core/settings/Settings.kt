@@ -17,6 +17,8 @@ enum class AudioBackend {
 /** Preferred stream quality for Yandex Music, in the api's own vocabulary. */
 @Serializable
 enum class StreamQuality(val apiValue: String) {
+    /** 64 kbps AAC, for metered connections. */
+    Low("lq"),
     Normal("nq"),
     High("hq"),
     Lossless("lossless");

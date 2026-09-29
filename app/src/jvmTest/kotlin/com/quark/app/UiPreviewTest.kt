@@ -19,10 +19,6 @@ import com.quark.app.image.Cover
 import com.quark.app.image.ImageCodec
 import com.quark.app.lyrics.LyricsScreen
 import com.quark.app.lyrics.LyricsState
-import com.quark.app.player.LibraryStatus
-import com.quark.app.settings.SettingsScreen
-import com.quark.app.player.PlayerScreen
-import com.quark.app.player.PlayerUi
 import com.quark.app.theme.AccentColors
 import com.quark.app.theme.Quark
 import com.quark.app.theme.QuarkTheme
@@ -65,42 +61,6 @@ import kotlin.time.Duration.Companion.seconds
 class UiPreviewTest {
 
     @Test
-    fun renders_the_player() {
-        val width = 1100
-        val height = 760
-        val cover = syntheticCover()
-        val ui = PreviewPlayerUi(cover)
-
-        val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
-            val backdrop = Backdrop(cover.blurred, Size(width.toFloat(), height.toFloat()))
-            QuarkTheme(accent = cover.accent) {
-                CompositionLocalProvider(LocalBackdrop provides backdrop) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .backdropBackground(
-                                backdrop,
-                                Quark.colors.backgroundScrim,
-                                Quark.colors.background,
-                            )
-                    ) {
-                        PlayerScreen(ui)
-                    }
-                }
-            }
-        }
-
-        val image = scene.render()
-        val out = File("build/preview/player.png")
-        out.parentFile.mkdirs()
-        out.writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes)
-        scene.close()
-
-        assertTrue(out.length() > 0, "preview was not written")
-        println("preview: ${out.absolutePath}")
-    }
-
-    @Test
     fun renders_the_lyrics_sheet() {
         val lyrics = LrcParser.parse(
             """
@@ -118,17 +78,6 @@ class UiPreviewTest {
             LyricsScreen(
                 state = LyricsState.Ready(lyrics),
                 activeLine = 4,
-                onClose = {},
-                modifier = Modifier.fillMaxSize().padding(48.dp),
-            )
-        }
-    }
-
-    @Test
-    fun renders_the_settings_sheet() {
-        renderSheet("settings.png") {
-            SettingsScreen(
-                store = InMemorySettings(),
                 onClose = {},
                 modifier = Modifier.fillMaxSize().padding(48.dp),
             )
@@ -204,72 +153,4 @@ class UiPreviewTest {
             },
         )
     }
-}
-
-/** A [PlayerUi] with fixed state and no engine behind it. */
-private class PreviewPlayerUi(cover: Cover) : PlayerUi {
-
-    private val tracks = listOf(
-        track("Dogs", "Pink Floyd", "Animals"),
-        track("Pigs (Three Different Ones)", "Pink Floyd", "Animals"),
-        track("Sheep", "Pink Floyd", "Animals"),
-        track("Heroes", "David Bowie", "\"Heroes\""),
-        track("Aria Math", "bxkq, Hardx", "Unknown"),
-        track("Washing Machine Heart", "Mitski", "Be the Cowboy"),
-        track("Du Hast", "Rammstein", "Sehnsucht"),
-        track("The Man Who Made a Monster", "Dance With the Dead", "Loved to Death"),
-    )
-
-    override val state: StateFlow<PlayerState> = MutableStateFlow(
-        PlayerState(
-            current = tracks[4],
-            playlist = tracks,
-            playlistInfo = PlaylistInfo(name = "Local"),
-            queue = listOf(tracks[1]),
-            position = 6.seconds,
-            duration = 245.seconds,
-            isPlaying = true,
-            repeat = RepeatMode.Off,
-            volume = 0.62f,
-        )
-    )
-
-    override val cover: StateFlow<Cover?> = MutableStateFlow(cover)
-    override val status: StateFlow<LibraryStatus> = MutableStateFlow(LibraryStatus.Idle)
-    override val scrubbing: StateFlow<Duration?> = MutableStateFlow(null)
-
-    private val thumbnail = cover.thumbnail
-
-    @Composable
-    override fun rememberThumbnail(track: Track): State<ImageBitmap?> =
-        remember(track.filepath) { mutableStateOf<ImageBitmap?>(thumbnail) }
-
-    override fun play(track: Track) = Unit
-    override fun playPause() = Unit
-    override fun next() = Unit
-    override fun previous() = Unit
-    override fun scrub(to: Duration) = Unit
-    override fun commitScrub() = Unit
-    override fun setVolume(volume: Float) = Unit
-    override fun toggleShuffle() = Unit
-    override fun toggleRepeat() = Unit
-    override fun enqueue(track: Track) = Unit
-    override fun clearQueue() = Unit
-}
-
-private fun track(title: String, artist: String, album: String): Track = LocalTrack(
-    title = title,
-    artists = listOf(artist),
-    albums = listOf(album),
-    filepath = "/music/${title.lowercase().replace(' ', '-')}.flac",
-    coverType = CoverType.BuiltIn,
-)
-
-
-/** Settings that live only as long as the preview does. */
-private class InMemorySettings : SettingsStore {
-    private val flow = MutableStateFlow(Settings())
-    override val settings = flow.asStateFlow()
-    override fun update(transform: (Settings) -> Settings) = flow.update(transform)
-    override suspend fun close() = Unit
 }

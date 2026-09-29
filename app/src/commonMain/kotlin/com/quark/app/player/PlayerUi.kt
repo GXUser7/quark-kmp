@@ -34,6 +34,7 @@ interface PlayerUi {
     fun scrub(to: Duration)
     fun commitScrub()
     fun setVolume(volume: Float)
+    fun setSpeed(speed: Float)
     fun toggleShuffle()
     fun toggleRepeat()
     fun enqueue(track: Track)

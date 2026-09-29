@@ -39,6 +39,7 @@ class PlaybackSession(
         startup = scope.launch {
             try {
                 controller.setVolume(settings.current.playback.volume)
+                settings.current.playback.speed.takeIf { it != 1f }?.let { controller.setSpeed(it) }
                 restore()
             } catch (e: CancellationException) {
                 throw e

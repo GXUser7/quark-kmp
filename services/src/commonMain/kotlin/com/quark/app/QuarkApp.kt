@@ -170,21 +170,45 @@ class QuarkApp(host: QuarkHost) {
         started = true
         playback.start()
         services.forEach(AppService::start)
-        scope.launch { restoreFromAccount() }
+        scope.launch { runCatching { syncAccount() } }
+        scope.launch { keepYandexTokenInAccount() }
     }
 
     /**
-     * With a quark account, the playlists are synced and a Yandex token kept
-     * in the cloud is brought down — signing in on a second machine should
-     * not mean signing in to every service again.
+     * With a quark account, the profile is refreshed, the playlists are synced
+     * and a Yandex token kept in the cloud is brought down — signing in on a
+     * second machine should not mean signing in to every service again.
      */
-    private suspend fun restoreFromAccount() {
+    suspend fun syncAccount() {
         val account = integrations.account
         if (!account.isLoggedIn) return
+        runCatching { account.me() }.getOrNull()?.let { profile ->
+            settings.update {
+                it.copy(
+                    account = it.account.copy(
+                        username = profile.username ?: it.account.username,
+                        email = profile.email ?: it.account.email,
+                    )
+                )
+            }
+        }
         if (!settings.current.yandex.isAuthorised) {
-            account.yandexToken()?.takeIf(String::isNotBlank)?.let { yandex.signIn(it) }
+            runCatching { account.yandexToken() }.getOrNull()?.takeIf(String::isNotBlank)?.let { yandex.signIn(it) }
         }
         cloudSync.run()
+    }
+
+    /** A Yandex sign-in is saved to the quark account too, as `_initYM` did. */
+    private suspend fun keepYandexTokenInAccount() {
+        var saved: String? = null
+        yandex.state.collect { state ->
+            val token = settings.current.yandex.token
+            if (state is com.quark.app.yandex.YandexState.SignedIn && token.isNotBlank() && token != saved &&
+                integrations.account.isLoggedIn
+            ) {
+                if (runCatching { integrations.account.saveYandexToken(token) }.isSuccess) saved = token
+            }
+        }
     }
 
     suspend fun shutdown() {

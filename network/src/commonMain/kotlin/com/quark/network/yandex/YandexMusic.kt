@@ -28,6 +28,7 @@ import kotlin.time.ExperimentalTime
 
 /** Requested audio quality, in the api's vocabulary. */
 enum class YandexQuality(val value: String) {
+    Low("lq"),
     Normal("nq"),
     High("hq"),
     Lossless("lossless"),
@@ -153,6 +154,16 @@ class YandexMusic(private val client: YandexClient) {
     suspend fun deletePlaylist(kind: Long, userId: Long = client.userId) {
         client.post("/users/$userId/playlists/$kind/delete")
     }
+
+    /** Makes the playlist [public] — visible on the profile and by link — or private. */
+    suspend fun setVisibility(kind: Long, public: Boolean, userId: Long = client.userId): PlaylistDto =
+        decode(
+            client.post(
+                "/users/$userId/playlists/$kind/visibility",
+                parameters = mapOf("value" to if (public) "public" else "private"),
+            ),
+            PlaylistDto.serializer(),
+        )
 
     /**
      * Inserts tracks at [at]. Playlists are edited by diff against a revision,

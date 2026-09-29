@@ -54,6 +54,7 @@ class ServiceCatalogs(
             tracks = tracks,
             playlistId = PlaylistId(0, playlist.id.hashCode().toLong(), PlaylistSource.Spotify),
             kind = if (playlist.isLiked) CollectionKind.Liked else CollectionKind.Playlist,
+            link = if (playlist.isLiked) null else "https://open.spotify.com/playlist/${playlist.id}",
         )
     }
 
@@ -184,6 +185,7 @@ class ServiceCatalogs(
                 coverUrl = thumbnail,
                 tracks = tracks,
                 playlistId = PlaylistId(0, id.hashCode().toLong(), PlaylistSource.YouTube),
+                link = "https://music.youtube.com/playlist?list=$id",
             )
         },
     )

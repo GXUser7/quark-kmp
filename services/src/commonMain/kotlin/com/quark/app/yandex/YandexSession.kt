@@ -54,6 +54,7 @@ class YandexSession(
 
     val quality: YandexQuality
         get() = when (settings.current.yandex.quality) {
+            StreamQuality.Low -> YandexQuality.Low
             StreamQuality.Normal -> YandexQuality.Normal
             StreamQuality.High -> YandexQuality.High
             StreamQuality.Lossless -> YandexQuality.Lossless

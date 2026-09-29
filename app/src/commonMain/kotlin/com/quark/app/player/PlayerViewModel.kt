@@ -83,7 +83,7 @@ class PlayerViewModel(private val app: QuarkApp) : PlayerUi {
      * them — and plays what was found. Folders are remembered so the watcher
      * can follow them.
      */
-    fun open(locations: List<String>, recursive: Boolean? = null, name: String? = null) {
+    fun open(locations: List<String>, recursive: Boolean? = null, name: String? = null, then: () -> Unit = {}) {
         if (locations.isEmpty()) return
         val descend = recursive ?: app.settings.current.library.recursiveFolderAdding
         val watchedFolders = locations.filter(app.library::isFolder).distinct()
@@ -108,6 +108,7 @@ class PlayerViewModel(private val app: QuarkApp) : PlayerUi {
                         if (result.tracks.isEmpty()) return@collect
                         app.tracks.remember(result.tracks)
                         app.playback.open(Playlist(name = title, tracks = result.tracks))
+                        then()
                     }
                 }
             }
@@ -160,6 +161,13 @@ class PlayerViewModel(private val app: QuarkApp) : PlayerUi {
         app.controller.setVolume(volume)
         app.settings.update { it.copy(playback = it.playback.copy(volume = volume)) }
     } }
+
+    override fun setSpeed(speed: Float) {
+        scope.launch {
+            app.controller.setSpeed(speed)
+            app.settings.update { it.copy(playback = it.playback.copy(speed = speed)) }
+        }
+    }
 
     override fun toggleShuffle() {
         if (state.value.isShuffled) app.controller.unshuffle()

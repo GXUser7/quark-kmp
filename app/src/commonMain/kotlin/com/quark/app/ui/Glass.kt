@@ -93,6 +93,7 @@ fun GlassSurface(
 ) {
     val backdrop = LocalBackdrop.current
     val fallback = Quark.colors.background
+    val recipe = if (Quark.colors.isLight) remember(glass) { glass.forLight() } else glass
     var bounds by remember { mutableStateOf(Rect.Zero) }
 
     Box(
@@ -106,10 +107,10 @@ fun GlassSurface(
                 // BackdropFilter always supplied an opaque backdrop.
                 if (backdrop.image == null) drawRect(fallback)
                 else drawBackdrop(backdrop, bounds)
-                drawRect(glass.tint)
-                glass.brush?.let { drawRect(it) }
+                drawRect(recipe.tint)
+                recipe.brush?.let { drawRect(it) }
             }
-            .border(1.dp, glass.border, shape),
+            .border(1.dp, recipe.border, shape),
         content = content,
     )
 }

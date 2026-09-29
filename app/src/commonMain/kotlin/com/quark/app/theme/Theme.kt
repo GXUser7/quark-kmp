@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quark.app.i18n.LocalStrings
+import com.quark.app.i18n.Strings
 
 /**
  * quark's palette, which is mostly not colour at all.
@@ -43,7 +45,40 @@ data class QuarkColors(
     val divider: Color = Color(0x1AFFFFFF),
     val rowHover: Color = Color(0x12FFFFFF),
     val rowSelected: Color = Color(0x1FFFFFFF),
-)
+
+    /** Menus and dialogs, which sit over anything and so are nearly opaque. */
+    val menu: Color = Color(0xF21C1C21),
+
+    /** Errors and destructive actions. */
+    val danger: Color = Color(0xFFFF6B6B),
+
+    val isLight: Boolean = false,
+) {
+    companion object {
+        val Dark = QuarkColors()
+
+        /**
+         * The light palette the slop branch added (`appThemeMode`): the same
+         * glass, frosted white instead of smoked, with ink for text.
+         */
+        val Light = QuarkColors(
+            background = Color(0xFFF1F1F4),
+            backgroundScrim = Color(0xA6FFFFFF),
+            text = Color(0xFF141418),
+            textSecondary = Color(0xFF4B4B53),
+            textMuted = Color(0x8C000000),
+            control = Color(0x14000000),
+            controlHover = Color(0x26000000),
+            track = Color(0x33000000),
+            divider = Color(0x1A000000),
+            rowHover = Color(0x0D000000),
+            rowSelected = Color(0x17000000),
+            menu = Color(0xF7FAFAFC),
+            danger = Color(0xFFD93B3B),
+            isLight = true,
+        )
+    }
+}
 
 /** One of the three glass recipes the original uses. */
 @Immutable
@@ -79,6 +114,14 @@ data class Glass(
     }
 
     val brush: Brush? get() = gradient?.let(Brush::verticalGradient)
+
+    /** The same recipe frosted rather than smoked, for the light theme. */
+    fun forLight(): Glass = Glass(
+        tint = Color.White.copy(alpha = (tint.alpha + 0.25f).coerceAtMost(0.85f)),
+        border = Color.Black.copy(alpha = 0.08f),
+        gradient = gradient?.map { Color.White.copy(alpha = it.alpha) },
+        blur = blur,
+    )
 }
 
 /** Colours taken from the current cover; see `AccentPalette`. */
@@ -146,18 +189,22 @@ object Quark {
 @Composable
 fun QuarkTheme(
     accent: AccentColors = AccentColors(),
+    light: Boolean = false,
+    strings: Strings = Strings(),
     content: @Composable () -> Unit,
 ) {
+    val colors = if (light) QuarkColors.Light else QuarkColors.Dark
     CompositionLocalProvider(
-        LocalQuarkColors provides QuarkColors(),
+        LocalQuarkColors provides colors,
         LocalAccent provides accent,
         LocalTypography provides typography(),
+        LocalStrings provides strings,
         // Material's ripple is the most recognisable thing about it; controls
         // here mark hover and press by changing their own fill.
         LocalIndication provides NoIndication,
         LocalTextSelectionColors provides TextSelectionColors(
-            handleColor = Color.White,
-            backgroundColor = Color(0x40FFFFFF),
+            handleColor = colors.text,
+            backgroundColor = colors.text.copy(alpha = 0.25f),
         ),
         content = content,
     )

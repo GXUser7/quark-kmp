@@ -59,6 +59,7 @@ class CoverLoader(
     private val lock = Mutex()
     private val cache = LinkedHashMap<String, Cover>()
     private val thumbnails = LinkedHashMap<String, ImageBitmap>()
+    private val pictures = LinkedHashMap<String, ImageBitmap>()
 
     /** Tracks already known to have no artwork, so the file is not reopened. */
     private val empty = mutableSetOf<String>()
@@ -112,6 +113,40 @@ class CoverLoader(
             else {
                 thumbnails[key] = image
                 trim(thumbnails, THUMBNAIL_CAPACITY)
+            }
+        }
+        return image
+    }
+
+    /**
+     * A picture that is not a track's cover — a playlist's, an album's, an
+     * artist's — fetched once through the image store and decoded at [size].
+     */
+    suspend fun picture(url: String, size: Int = PICTURE_SIZE): ImageBitmap? {
+        if (url.isBlank()) return null
+        val key = "$size:$url"
+        lock.withLock {
+            pictures.remove(key)?.let { hit ->
+                pictures[key] = hit
+                return hit
+            }
+            if (key in empty) return null
+        }
+        val bytes = try {
+            remote?.get(url)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        val image = bytes?.let {
+            withContext(decoding) { runCatching { ImageCodec.decode(it, size) }.getOrNull() }
+        }
+        lock.withLock {
+            if (image == null) empty += key
+            else {
+                pictures[key] = image
+                trim(pictures, PICTURE_CAPACITY)
             }
         }
         return image
@@ -187,6 +222,8 @@ class CoverLoader(
         const val DEFAULT_CAPACITY = 32
         const val THUMBNAIL_CAPACITY = 400
         const val THUMBNAIL_DECODE = 256
+        const val PICTURE_SIZE = 360
+        const val PICTURE_CAPACITY = 160
     }
 
     private data class DecodedCover(

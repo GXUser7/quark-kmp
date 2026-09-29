@@ -1,5 +1,6 @@
 package com.quark.app
 
+import com.quark.data.files.Files
 import com.quark.platform.DeviceKind
 
 /**
@@ -41,6 +42,13 @@ interface Platform {
 
     /** Puts [text] on the clipboard. */
     fun copyToClipboard(text: String) {}
+
+    /**
+     * Reads a small text file the user picked with [pickFile], such as a
+     * cookie export. A path on the desktop, a content uri on Android.
+     */
+    suspend fun readText(location: String): String? =
+        runCatching { Files.readBytes(location)?.decodeToString() }.getOrNull()
 }
 
 val Platform.isDesktop: Boolean get() = kind == DeviceKind.Desktop

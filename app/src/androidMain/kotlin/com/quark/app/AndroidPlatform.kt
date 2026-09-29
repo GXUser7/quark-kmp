@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat
 import com.quark.data.local.AndroidLibrary
 import com.quark.platform.DeviceKind
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * [Platform] on Android. The pickers are activity result contracts, which have
@@ -107,6 +109,13 @@ class AndroidPlatform(private val activity: ComponentActivity) : Platform {
     override fun copyToClipboard(text: String) {
         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         clipboard?.setPrimaryClip(ClipData.newPlainText("quark", text))
+    }
+
+    override suspend fun readText(location: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            if (!location.startsWith("content:")) return@runCatching java.io.File(location).readText()
+            activity.contentResolver.openInputStream(Uri.parse(location))?.use { it.readBytes().decodeToString() }
+        }.getOrNull()
     }
 
     private fun persist(uri: Uri) {

@@ -50,6 +50,8 @@ class YandexCatalog(
             kind = if (dto.isLikes) CollectionKind.Liked else CollectionKind.Playlist,
             yandexKind = kind.takeIf { ownerUid == account() && !dto.isLikes },
             yandexRevision = dto.revision,
+            link = "https://music.yandex.ru/users/${dto.owner.login.ifBlank { ownerUid.toString() }}/playlists/$kind",
+            isPublic = dto.visibility?.let { it == "public" }?.takeIf { ownerUid == account() && !dto.isLikes },
         )
     }
 
@@ -68,6 +70,7 @@ class YandexCatalog(
             playlistId = PlaylistId(0, id, PlaylistSource.YandexMusic),
             kind = CollectionKind.Album,
             artistIds = album.artists.map { it.id to it.name },
+            link = "https://music.yandex.ru/album/$id",
         )
     }
 
@@ -84,6 +87,10 @@ class YandexCatalog(
             albums = brief.albums.map { it.summary() },
             alsoAlbums = brief.alsoAlbums.map { it.summary() },
             similar = brief.similarArtists.map { it.summary() },
+            playlists = brief.playlists.map { it.summary() },
+            likes = brief.artist.likesCount,
+            monthlyListeners = brief.stats?.lastMonthListeners?.takeIf { it > 0 },
+            link = "https://music.yandex.ru/artist/$id",
         )
     }
 
@@ -129,12 +136,43 @@ class YandexCatalog(
         )
     }
 
-    /** Adds [tracks] to the user's Yandex playlist [kind], at its top as the app does. */
-    suspend fun addToPlaylist(kind: Long, revision: Int, tracks: List<YandexTrack>) {
+    /** The user's own playlists, which tracks can be added to; Liked is not one. */
+    suspend fun editablePlaylists(): List<EditablePlaylist> {
+        val me = account()
+        return api.playlistsWithLikes()
+            .filter { !it.isLikes && it.ownerUid == me }
+            .map { EditablePlaylist(it.kind, it.title) }
+    }
+
+    /**
+     * Adds [tracks] to the user's Yandex playlist [kind], at its top as the app
+     * does. The playlist is read first for its revision: edits against a stale
+     * one are refused.
+     */
+    suspend fun addToPlaylist(kind: Long, tracks: List<YandexTrack>) {
+        val revision = api.playlist(kind = kind, userId = account()).revision
         api.insertTracks(kind, revision, tracks.map { it.trackId to it.albumId })
     }
 
+    /** Removes the entry of [track] from the user's playlist [kind]. */
+    suspend fun removeFromPlaylist(kind: Long, track: YandexTrack) {
+        val dto = api.playlist(kind = kind, userId = account())
+        val index = dto.tracks.indexOfFirst { it.id == track.trackId || it.id.substringBefore(':') == track.trackId }
+        if (index < 0) return
+        api.deleteTracks(kind, dto.revision, index, index + 1)
+    }
+
     suspend fun createPlaylist(title: String): Long = api.createPlaylist(title).kind
+
+    suspend fun renamePlaylist(kind: Long, title: String) {
+        api.renamePlaylist(kind, title)
+    }
+
+    suspend fun deletePlaylist(kind: Long) = api.deletePlaylist(kind)
+
+    suspend fun setVisibility(kind: Long, public: Boolean) {
+        api.setVisibility(kind, public)
+    }
 
     private fun account(): Long = session.api?.accountId ?: 0L
 

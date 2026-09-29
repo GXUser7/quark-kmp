@@ -12,7 +12,9 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -141,25 +143,53 @@ fun CircleButton(
     }
 }
 
-/** The wide rounded buttons on the start screen and in dialogs. */
+/**
+ * The wide rounded buttons on the start screen and in dialogs. [accent] fills
+ * it with the cover's colour for the one action a screen is about, [danger]
+ * tints it for the ones that delete.
+ */
 @Composable
-fun PillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun PillButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    accent: Boolean = false,
+    danger: Boolean = false,
+    height: Dp = 45.dp,
+) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val colors = Quark.colors
-    val background by animateColorAsState(if (hovered) colors.controlHover else colors.control)
+    val accentColor = Quark.accent.primary
+    val background by animateColorAsState(
+        when {
+            accent -> accentColor.copy(alpha = if (hovered) 0.55f else 0.4f)
+            danger -> colors.danger.copy(alpha = if (hovered) 0.3f else 0.18f)
+            hovered && enabled -> colors.controlHover
+            else -> colors.control
+        }
+    )
+    val content = when {
+        !enabled -> colors.textMuted.copy(alpha = 0.4f)
+        danger -> colors.danger
+        else -> colors.text
+    }
 
-    Box(
+    Row(
         modifier
-            .height(45.dp)
+            .height(height)
             .clip(RoundedCornerShape(Radius.control))
             .background(background)
-            .hoverable(interaction)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 24.dp),
-        contentAlignment = Alignment.Center,
+            .hoverable(interaction, enabled)
+            .clickable(enabled = enabled, interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
     ) {
-        QText(text, Quark.type.button, color = colors.text, maxLines = 1)
+        if (icon != null) QIcon(icon, Modifier.size(18.dp), content)
+        QText(text, Quark.type.button, color = content, maxLines = 1)
     }
 }
 
