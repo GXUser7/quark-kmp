@@ -7,7 +7,9 @@ enum class PlaylistSource(val value: String) {
     Local("local"),
     YandexMusic("yandex_music"),
     Spotify("spotify"),
-    YouTube("youtube");
+    YouTube("youtube"),
+    SoundCloud("soundcloud"),
+    Vk("vkmusic");
 
     companion object {
         fun parse(value: String?): PlaylistSource =

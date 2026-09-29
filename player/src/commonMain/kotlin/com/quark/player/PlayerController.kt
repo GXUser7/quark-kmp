@@ -68,6 +68,9 @@ class PlayerController(
                     is EngineEvent.TotalDuration -> _state.update { it.copy(duration = event.duration) }
                     is EngineEvent.PlayingChanged -> _state.update { it.copy(isPlaying = event.isPlaying) }
                     EngineEvent.Completed -> onEngineAdvanced()
+                    // Nothing was waiting in the engine, so the next track has
+                    // to be opened rather than merely caught up with.
+                    EngineEvent.Ended -> skipForward(ChangeReason.Completed)
                     // A track that will not open is not worth stalling on.
                     is EngineEvent.Failed -> skipForward(ChangeReason.Completed)
                 }

@@ -127,10 +127,7 @@ class YandexClient(
         private const val ERROR_BODY_LIMIT = 300
 
         fun defaultHttpClient(engineJson: Json = Json { ignoreUnknownKeys = true }): HttpClient =
-            HttpClient {
-                install(ContentNegotiation) { json(engineJson) }
-                expectSuccess = false
-            }
+            com.quark.network.defaultHttpClient(engineJson)
     }
 }
 

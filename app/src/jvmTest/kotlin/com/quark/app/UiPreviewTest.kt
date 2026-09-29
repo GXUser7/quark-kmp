@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.quark.app.image.Cover
-import com.quark.app.image.CoverBlur
+import com.quark.app.image.ImageCodec
 import com.quark.app.lyrics.LyricsScreen
 import com.quark.app.lyrics.LyricsState
 import com.quark.app.player.LibraryStatus
@@ -191,8 +191,8 @@ class UiPreviewTest {
 
         return Cover(
             image = bitmap,
-            thumbnail = CoverBlur.thumbnail(image),
-            blurred = CoverBlur.blur(image),
+            thumbnail = ImageCodec.thumbnail(bitmap),
+            blurred = ImageCodec.blur(bitmap),
             accent = if (palette.size == AccentPalette.ZONES) {
                 AccentColors(
                     primary = androidx.compose.ui.graphics.Color(palette[0]),

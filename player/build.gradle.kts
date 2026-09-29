@@ -1,23 +1,46 @@
-plugins { kotlin("multiplatform") }
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.library)
+}
 
 kotlin {
     jvmToolchain(21)
     jvm()
+    androidTarget {
+        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    }
     sourceSets {
         commonMain.dependencies {
             api(project(":core"))
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+            implementation(libs.kotlinx.coroutines.core)
         }
         jvmMain.dependencies {
-            implementation("net.java.dev.jna:jna:5.17.0")
+            implementation(libs.jna)
+        }
+        androidMain.dependencies {
+            api(libs.media3.exoplayer)
+            implementation(libs.androidx.annotation)
+            implementation(libs.kotlinx.coroutines.android)
         }
         jvmTest.dependencies {
-            implementation("net.java.dev.jna:jna:5.17.0")
+            implementation(libs.jna)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+            implementation(libs.kotlinx.coroutines.test)
         }
+    }
+}
+
+android {
+    namespace = "com.quark.player"
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    defaultConfig { minSdk = libs.versions.android.minSdk.get().toInt() }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 

@@ -13,9 +13,6 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Progress of a scan, so a large folder can show something while it runs. */
-data class ScanProgress(val found: Int, val read: Int, val current: String?)
-
 /**
  * Turns folders and files into tracks.
  *
@@ -87,9 +84,4 @@ class LibraryScanner(private val io: CoroutineDispatcher = Dispatchers.IO) {
     private companion object {
         const val PROGRESS_BATCH = 25
     }
-}
-
-sealed interface ScanResult {
-    data class Progress(val progress: ScanProgress) : ScanResult
-    data class Done(val tracks: List<LocalTrack>) : ScanResult
 }

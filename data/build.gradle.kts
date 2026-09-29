@@ -1,33 +1,61 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    kotlin("multiplatform")
-    kotlin("plugin.serialization")
-    id("app.cash.sqldelight")
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.sqldelight)
 }
 
 kotlin {
     jvmToolchain(21)
     jvm()
+    androidTarget {
+        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    }
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":core"))
-            implementation("app.cash.sqldelight:runtime:2.1.0")
-            implementation("io.ktor:ktor-client-core:3.4.0")
-            implementation("app.cash.sqldelight:coroutines-extensions:2.1.0")
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
+            api(project(":core"))
+            api(libs.sqldelight.runtime)
+            implementation(libs.sqldelight.coroutines)
+            implementation(libs.ktor.client.core)
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
         }
-        jvmMain.dependencies {
-            implementation("app.cash.sqldelight:sqlite-driver:2.1.0")
-            implementation("net.jthink:jaudiotagger:3.0.1")
+        // java.io / java.nio code both JVM platforms can run: settings file,
+        // cover cache, track downloads. See network/build.gradle.kts.
+        jvmMain {
+            kotlin.srcDir("src/jvmShared/kotlin")
+            dependencies {
+                implementation(libs.sqldelight.sqlite.driver)
+                implementation(libs.jaudiotagger)
+            }
+        }
+        androidMain {
+            kotlin.srcDir("src/jvmShared/kotlin")
+            dependencies {
+                implementation(libs.sqldelight.android.driver)
+                implementation(libs.androidx.documentfile)
+            }
         }
         jvmTest.dependencies {
-            implementation("app.cash.sqldelight:sqlite-driver:2.1.0")
-            implementation("io.ktor:ktor-client-mock:3.4.0")
+            implementation(libs.sqldelight.sqlite.driver)
+            implementation(libs.ktor.client.mock)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+            implementation(libs.kotlinx.coroutines.test)
         }
+    }
+}
+
+android {
+    namespace = "com.quark.data"
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    defaultConfig { minSdk = libs.versions.android.minSdk.get().toInt() }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 

@@ -1,5 +1,6 @@
 package com.quark.app.player
 
+import com.quark.app.AppService
 import com.quark.core.model.Playlist
 import com.quark.core.model.PlaylistSource
 import com.quark.core.settings.SettingsStore
@@ -29,11 +30,11 @@ class LibraryWatcher(
     private val playback: PlaybackSession,
     private val observer: DirectoryObserver,
     private val scope: CoroutineScope,
-) {
+) : AppService {
     private var job: Job? = null
 
     @OptIn(FlowPreview::class)
-    fun start() {
+    override fun start() {
         if (job != null) return
         job = scope.launch {
             settings.settings
@@ -65,7 +66,7 @@ class LibraryWatcher(
         }
     }
 
-    suspend fun close() {
+    override suspend fun close() {
         job?.cancelAndJoin()
         job = null
     }
