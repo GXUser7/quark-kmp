@@ -2,6 +2,7 @@ package com.quark.app
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -12,6 +13,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.runBlocking
+import com.quark.app.desktop.WindowsMediaControls
 import org.jetbrains.skia.Image
 
 fun main() = application {
@@ -34,6 +36,11 @@ fun main() = application {
             return@Window
         }
         val platform = remember { DesktopPlatform { window } }
+        LaunchedEffect(app) {
+            if (WindowsMediaControls.isWindows) {
+                app.attach(WindowsMediaControls(app.controller, app.settings, app.scope) { window.windowHandle })
+            }
+        }
         Box(Modifier.fillMaxSize().fileDrop(app)) {
             QuarkRoot(app, platform)
         }

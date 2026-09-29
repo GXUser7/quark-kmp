@@ -145,8 +145,7 @@ class AppRenderTest {
                 out.parentFile.mkdirs()
                 out.writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes)
                 assertTrue(out.length() > 0, "$name was not drawn")
-                // A small copy, which CI prints so the screens can be looked at
-                // from the build log alone.
+                // A small copy, quicker to page through.
                 val small = File("build/preview/small/$name.jpg")
                 small.parentFile.mkdirs()
                 small.writeBytes(shrink(image, 0.5f))

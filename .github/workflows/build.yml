@@ -34,17 +34,6 @@ jobs:
         run: |
           grep -E "^e: |^w: .*error|What went wrong|FAILED|> " -A2 build.log | head -150
           find . -path "*/build/test-results/*" -name "*.xml" -exec grep -h -A 40 "<failure" {} + | head -300
-      # The render test's screens, small, as base64 in the log: a way to look
-      # at the interface of a build without downloading anything.
-      - name: Previews
-        if: always()
-        run: |
-          for f in app/build/preview/small/*.jpg; do
-            [ -f "$f" ] || continue
-            echo "@@PREVIEW $(basename "$f")"
-            base64 -w 120 "$f"
-            echo "@@END"
-          done
       - name: Test reports
         if: failure()
         uses: actions/upload-artifact@v4
@@ -107,6 +96,14 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      # The media overlay binding is WinRT through JNA; only a real Windows
+      # session can call it. A failure here is reported, not fatal: the player
+      # turns the integration off when it cannot bind.
+      - name: Media controls
+        continue-on-error: true
+        run: |
+          ./gradlew :app:jvmTest --tests "com.quark.app.desktop.SmtcTest" 2>&1 | tail -40
+          find app/build/test-results -name "*SmtcTest*.xml" -exec cat {} +
       - name: Package
         run: |
           ./gradlew :app:packageMsi :app:packageExe :app:createDistributable 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
