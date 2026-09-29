@@ -98,7 +98,8 @@ Go+), VK Музыка (через аккаунт quark: токен Kate или �
 **Аккаунт quark.** Регистрация, вход, сброс пароля по коду, подтверждение почты, смена пароля,
 профиль; токен Яндекса хранится в аккаунте и подтягивается на новом устройстве.
 
-**Интеграции.** SMTC на Windows (оверлей, экран блокировки, медиаклавиши), уведомление и
+**Интеграции.** SMTC на Windows (оверлей, экран блокировки, медиаклавиши, обложки и
+стриминговых, и локальных треков), тёмный/цветной заголовок окна на Windows, уведомление и
 lock screen на Android (MediaSession), Discord Rich Presence, локальное API v0 (контракт не
 менялся; тесты против Ktor test host) и mDNS, горячие клавиши (Esc, Ctrl+F, Ctrl+стрелки,
 медиаклавиши).
@@ -116,11 +117,10 @@ lock screen на Android (MediaSession), Discord Rich Presence, локально
 | Задача | Замечания |
 | --- | --- |
 | **MPRIS2 (Linux).** | `dbus-java`, интерфейсы `org.mpris.MediaPlayer2` и `.Player`; повесить как `AppService`, по образцу `WindowsMediaControls`. |
-| **Обложки локальных треков в SMTC.** | `RandomAccessStreamReference.CreateFromUri` берёт только http(s); для файлов нужен `CreateFromStream` с `InMemoryRandomAccessStream`. |
 | **Перенос настроек из Flutter-установки.** | `quark.db` открывается как есть, но настройки оригинала лежат в Hive (свой бинарный формат); токены придётся ввести заново. |
 | **MusicBrainz, распознавание трека.** | `/api/quark/recognizer/recognize` на бэкенде; в `slop` это было экспериментом. |
 | **Концерты на странице артиста, обложки плейлистов Яндекса.** | API есть, экранов нет. |
-| **Хром окна.** | Оригинал красил заголовок из обложки (Linux) и включал тёмную рамку через `DwmSetWindowAttribute` (Windows). |
+| **Хром окна на Linux.** | На Windows сделано (`desktop/WindowChrome.kt`: тёмная рамка, на Windows 11 цвет заголовка из обложки). Оригинал на Linux ещё подменял `GtkHeaderBar` градиентом из обложки. |
 | **libmpv для macOS.** | `fetchMpv` качает только Windows-сборку. |
 
 ---

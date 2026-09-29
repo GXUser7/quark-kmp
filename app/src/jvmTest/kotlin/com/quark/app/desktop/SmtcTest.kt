@@ -58,6 +58,15 @@ class SmtcTest {
                 smtc.setPlaying(true)
                 smtc.setTrack("Heroes", "David Bowie", "\"Heroes\"", "https://avatars.yandex.net/get-music-content/49876/b0f7f4d1.a.2185786-1/400x400")
                 smtc.setTrack("Untitled", "", "", null)
+                val cover = java.io.File.createTempFile("quark-cover", ".png").apply {
+                    // A 1×1 PNG is enough for SMTC to take a stream over a file.
+                    writeBytes(java.util.Base64.getDecoder().decode(
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+                    ))
+                    deleteOnExit()
+                }
+                smtc.setTrack("Local", "Artist", "Album", null, cover.absolutePath)
+                check(smtc.canReadCoverFile(cover.absolutePath)) { "no stream over the cover file" }
                 smtc.setPlaying(false)
                 smtc.close()
             }.get(60, TimeUnit.SECONDS)

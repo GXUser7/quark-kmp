@@ -12,6 +12,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -101,6 +104,7 @@ import com.quark.app.ui.ThinSlider
 import com.quark.core.model.Track
 import com.quark.core.player.PlayerState
 import com.quark.core.player.RepeatMode
+import kotlinx.coroutines.delay
 import kotlin.time.Duration
 
 /** Width of the playlist panel, and how far it pushes the player across. */
@@ -224,6 +228,21 @@ private fun FullPlayer(
                     .align(Alignment.TopEnd)
                     .padding(16.dp),
             )
+        }
+
+        // "Playlist opening area": resting the pointer on the left edge opens
+        // the panel, as `playlistOpeningArea` did in main_player.dart.
+        val openingArea = shell.app.settings.settings.collectAsState().value.appearance.playlistOpeningArea
+        if (openingArea && !panelOpen) {
+            val edge = remember { MutableInteractionSource() }
+            val hovered by edge.collectIsHoveredAsState()
+            LaunchedEffect(hovered) {
+                if (hovered) {
+                    delay(250)
+                    actions.onTogglePanel()
+                }
+            }
+            Box(Modifier.align(Alignment.CenterStart).width(14.dp).fillMaxHeight().hoverable(edge))
         }
     }
 }

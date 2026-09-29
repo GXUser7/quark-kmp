@@ -40,7 +40,15 @@ fun main() = application {
         WindowChrome(window, app)
         LaunchedEffect(app) {
             if (WindowsMediaControls.isWindows) {
-                app.attach(WindowsMediaControls(app.controller, app.settings, app.scope) { window.windowHandle })
+                app.attach(
+                    WindowsMediaControls(
+                        controller = app.controller,
+                        settings = app.settings,
+                        scope = app.scope,
+                        artwork = { track -> app.library.artwork(track) },
+                        coverFolder = java.io.File(app.paths.cache),
+                    ) { window.windowHandle }
+                )
             }
         }
         Box(Modifier.fillMaxSize().fileDrop(app)) {

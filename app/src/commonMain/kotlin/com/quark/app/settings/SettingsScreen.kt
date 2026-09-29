@@ -167,6 +167,11 @@ fun SettingsScreen() {
                     Toggle(s.dynamicWindowColor, s.dynamicWindowColorHint, settings.appearance.dynamicWindowColor) { on ->
                         store.update { it.copy(appearance = it.appearance.copy(dynamicWindowColor = on)) }
                     }
+                    if (desktop) {
+                        Toggle(s.playlistArea, s.playlistAreaHint, settings.appearance.playlistOpeningArea) { on ->
+                            store.update { it.copy(appearance = it.appearance.copy(playlistOpeningArea = on)) }
+                        }
+                    }
                     Toggle(s.originalCoverSize, s.originalCoverSizeHint, settings.appearance.originalSizeCovers) { on ->
                         store.update { it.copy(appearance = it.appearance.copy(originalSizeCovers = on)) }
                     }

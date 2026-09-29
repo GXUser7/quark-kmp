@@ -102,8 +102,10 @@ jobs:
       - name: Media controls
         continue-on-error: true
         run: |
-          ./gradlew :app:jvmTest --tests "com.quark.app.desktop.SmtcTest" 2>&1 | tail -40
-          find app/build/test-results -name "*SmtcTest*.xml" -exec cat {} +
+          ./gradlew :app:jvmTest --tests "com.quark.app.desktop.SmtcTest" 2>&1 | tail -40 || true
+          find app/build/test-results -name "*SmtcTest*.xml" -exec grep -h -A 14 "<failure" {} + || true
+          ls -la /c/Windows/System32/Windows.Media.dll /c/Windows/System32/Windows.Media.MediaControl.dll 2>&1 || true
+          cmd //c ver || true
       - name: Package
         run: |
           ./gradlew :app:packageMsi :app:packageExe :app:createDistributable 2>&1 | tee build.log; exit ${PIPESTATUS[0]}

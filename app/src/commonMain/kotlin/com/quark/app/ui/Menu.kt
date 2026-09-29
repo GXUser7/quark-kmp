@@ -134,6 +134,3 @@ private class AnchoredMenuPosition : PopupPositionProvider {
         return IntOffset(x, y.coerceIn(margin, maxY))
     }
 }
-
-/** Keeps a fixed-width column of menu-like content from stretching. */
-fun Modifier.menuWidth(): Modifier = width(260.dp)

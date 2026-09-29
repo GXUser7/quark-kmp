@@ -52,14 +52,18 @@ internal class Smtc private constructor(
         call(controls, CONTROLS_PUT_PLAYBACK_STATUS, status)
     }
 
-    /** What the overlay shows; [thumbnailUrl] must be http(s), which is what WinRT fetches itself. */
-    fun setTrack(title: String, artist: String, album: String, thumbnailUrl: String?) {
+    /**
+     * What the overlay shows. The cover is either [thumbnailUrl], which must
+     * be http(s) for WinRT to fetch it, or an image file at [thumbnailFile].
+     */
+    fun setTrack(title: String, artist: String, album: String, thumbnailUrl: String?, thumbnailFile: String? = null) {
         call(updater, UPDATER_PUT_TYPE, TYPE_MUSIC)
         withString(title) { call(music, MUSIC_PUT_TITLE, it) }
         withString(artist) { call(music, MUSIC_PUT_ARTIST, it) }
         withString(artist) { call(music, MUSIC_PUT_ALBUM_ARTIST, it) }
         music2?.let { properties -> withString(album) { call(properties, MUSIC2_PUT_ALBUM_TITLE, it) } }
         val thumbnail = thumbnailUrl?.takeIf { it.startsWith("http") }?.let(::streamReference)
+            ?: thumbnailFile?.let(::fileReference)
         try {
             call(updater, UPDATER_PUT_THUMBNAIL, thumbnail)
         } finally {
@@ -103,6 +107,26 @@ internal class Smtc private constructor(
         } finally {
             release(statics)
             release(uri)
+        }
+    }.getOrNull()
+
+    /** Whether covers can be read from files here; for the test on Windows. */
+    internal fun canReadCoverFile(path: String): Boolean = fileReference(path)?.also(::release) != null
+
+    /**
+     * A stream over a file, without WinRT's asynchronous file api: shcore
+     * opens it synchronously, and the stream reference wraps it.
+     */
+    private fun fileReference(path: String): Pointer? = runCatching {
+        val stream = PointerByReference()
+        val result = shcore.CreateRandomAccessStreamOnFile(WString(path), FILE_ACCESS_READ, guid(IID_RANDOM_ACCESS_STREAM), stream)
+        check(result == S_OK) { hresult("CreateRandomAccessStreamOnFile", result) }
+        val statics = activationFactory("Windows.Storage.Streams.RandomAccessStreamReference", IID_STREAM_REFERENCE_STATICS)
+        try {
+            outPointer { call(statics, STREAM_REFERENCE_CREATE_FROM_STREAM, stream.value, it) }
+        } finally {
+            release(statics)
+            release(stream.value)
         }
     }.getOrNull()
 
@@ -174,8 +198,14 @@ internal class Smtc private constructor(
         fun WindowsDeleteString(string: Pointer?): Int
     }
 
+    @Suppress("FunctionName")
+    private interface Shcore : Library {
+        fun CreateRandomAccessStreamOnFile(path: WString, accessMode: Int, iid: Pointer, stream: PointerByReference): Int
+    }
+
     companion object {
         private val combase: Combase by lazy { Native.load("combase", Combase::class.java) }
+        private val shcore: Shcore by lazy { Native.load("shcore", Shcore::class.java) }
 
         /**
          * Joins the calling thread to the multithreaded apartment and binds
@@ -288,6 +318,7 @@ internal class Smtc private constructor(
         val IID_MUSIC2: UUID = UUID.fromString("00368462-97d3-44b9-b00f-008afcefaf18")
         val IID_URI_FACTORY: UUID = UUID.fromString("44a9796f-723e-4fdf-a218-033e75b0c084")
         val IID_STREAM_REFERENCE_STATICS: UUID = UUID.fromString("857309dc-3fbf-4e7d-986f-ef3b1a07a964")
+        val IID_RANDOM_ACCESS_STREAM: UUID = UUID.fromString("905a0fe1-bc53-11df-8c49-001e4fc686da")
 
         /** `TypedEventHandler<SystemMediaTransportControls, …ButtonPressedEventArgs>`, derived by WinRT's rules. */
         val IID_BUTTON_HANDLER: UUID = UUID.fromString("0557e996-7b23-5bae-aa81-ea0d671143a4")
@@ -320,6 +351,8 @@ internal class Smtc private constructor(
         private const val ARGS_GET_BUTTON = 6
         private const val URI_FACTORY_CREATE = 6
         private const val STREAM_REFERENCE_CREATE_FROM_URI = 7
+        private const val STREAM_REFERENCE_CREATE_FROM_STREAM = 8
+        private const val FILE_ACCESS_READ = 0
 
         private const val STATUS_CLOSED = 0
         private const val STATUS_PLAYING = 3

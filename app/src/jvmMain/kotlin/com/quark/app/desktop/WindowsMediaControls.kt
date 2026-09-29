@@ -2,9 +2,11 @@ package com.quark.app.desktop
 
 import com.quark.app.AppService
 import com.quark.core.model.CoverType
+import com.quark.core.model.Track
 import com.quark.core.settings.SettingsStore
 import com.quark.player.PlayerController
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.combine
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.concurrent.Executors
 
 /**
@@ -27,6 +30,10 @@ class WindowsMediaControls(
     private val controller: PlayerController,
     private val settings: SettingsStore,
     private val scope: CoroutineScope,
+    /** Embedded covers of local files, which SMTC is given as a file. */
+    private val artwork: suspend (Track) -> ByteArray?,
+    /** Where those covers are written; two files taken in turn, as SMTC keeps the last one open. */
+    private val coverFolder: File,
     private val windowHandle: () -> Long,
 ) : AppService {
 
@@ -51,6 +58,7 @@ class WindowsMediaControls(
                 controller.state.map { it.isPlaying }.distinctUntilChanged(),
             ) { (track, hasTrack), playing -> Triple(track, hasTrack, playing) }
                 .collect { (track, hasTrack, playing) ->
+                    val cover = if (hasTrack) coverFile(track) else null
                     onThread { controls ->
                         controls.setPlaying(playing, closed = !hasTrack)
                         if (hasTrack) {
@@ -59,6 +67,7 @@ class WindowsMediaControls(
                                 artist = track.artistLine,
                                 album = track.albumLine,
                                 thumbnailUrl = track.cover.takeIf { track.coverType == CoverType.Url },
+                                thumbnailFile = cover,
                             )
                         }
                     }
@@ -82,6 +91,7 @@ class WindowsMediaControls(
             }
         }
         val state = controller.state.value
+        val cover = if (state.hasTrack) coverFile(state.current) else null
         onThread { controls ->
             controls.setPlaying(state.isPlaying, closed = !state.hasTrack)
             if (state.hasTrack) {
@@ -90,8 +100,26 @@ class WindowsMediaControls(
                     state.current.artistLine,
                     state.current.albumLine,
                     state.current.cover.takeIf { state.current.coverType == CoverType.Url },
+                    cover,
                 )
             }
+        }
+    }
+
+    private var coverTurn = 0
+
+    /** The embedded cover of a local track, written out for SMTC; null for streamed ones. */
+    private suspend fun coverFile(track: Track): String? {
+        if (track.coverType == CoverType.Url || track.coverType == CoverType.NoCover) return null
+        val bytes = runCatching { artwork(track) }.getOrNull() ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                coverFolder.mkdirs()
+                coverTurn = 1 - coverTurn
+                val file = File(coverFolder, "smtc-cover-$coverTurn")
+                file.writeBytes(bytes)
+                file.absolutePath
+            }.getOrNull()
         }
     }
 

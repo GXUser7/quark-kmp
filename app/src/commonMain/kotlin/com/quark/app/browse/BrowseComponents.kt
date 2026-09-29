@@ -466,7 +466,3 @@ fun kotlin.time.Duration.clock(): String {
         "$minutes:${seconds.toString().padStart(2, '0')}"
     }
 }
-
-/** Fills the rest of a Column; the screens' lists stop above the mini player. */
-@Composable
-fun ColumnFill(modifier: Modifier = Modifier) = Spacer(modifier.fillMaxSize())

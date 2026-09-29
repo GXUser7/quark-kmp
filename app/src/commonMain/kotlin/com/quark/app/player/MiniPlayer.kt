@@ -95,6 +95,3 @@ fun MiniPlayer(model: PlayerViewModel, modifier: Modifier = Modifier) {
         }
     }
 }
-
-/** Clips a surface the way the bar is clipped, for anything drawn under it. */
-fun Modifier.miniPlayerShape(): Modifier = clip(RoundedCornerShape(Radius.card))
