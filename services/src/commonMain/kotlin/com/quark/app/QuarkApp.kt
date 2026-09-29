@@ -1,6 +1,17 @@
 package com.quark.app
 
+import com.quark.app.browse.MultiSearch
+import com.quark.app.browse.ServiceCatalogs
+import com.quark.app.browse.YandexCatalog
+import com.quark.app.export.Exporter
+import com.quark.app.export.TagEditor
+import com.quark.app.integrations.Integrations
+import com.quark.app.library.CloudSync
+import com.quark.app.library.UserLibrary
 import com.quark.app.player.PlaybackSession
+import com.quark.app.stats.StatsModel
+import com.quark.app.yandex.WaveSession
+import com.quark.app.yandex.YandexLikes
 import com.quark.app.player.TrackCacheCoordinator
 import com.quark.app.stats.ListenLogger
 import com.quark.app.yandex.YandexSession
@@ -22,6 +33,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -43,6 +55,8 @@ class QuarkHost(
     val downloader: TrackDownloader,
     val io: CoroutineDispatcher,
     val main: CoroutineDispatcher,
+    /** Writes tags into exported files; null where there is nothing to do it with. */
+    val tagEditor: TagEditor? = null,
 )
 
 /** Something that runs alongside the player for as long as the app does. */
@@ -78,12 +92,36 @@ class QuarkApp(host: QuarkHost) {
     val listenStats = ListenStatsRepository(database, io)
     val coverColors = CoverColorRepository(database, io)
 
-    val yandex = YandexSession(settings, scope, http)
-    val resolver = QuarkSourceResolver(yandex)
+    val yandex = YandexSession(settings, scope, http).apply {
+        cacheRoot = host.paths.cache
+        separator = host.paths.separator
+    }
+    val integrations = Integrations(settings, http)
+    val resolver = QuarkSourceResolver(yandex).also(integrations::register)
 
     private val engine: AudioEngine = host.engine
     val controller = PlayerController(engine, resolver, scope)
     val playback = PlaybackSession(controller, settings, playlists, scope)
+
+    val likes = YandexLikes(yandex, scope)
+    val wave = WaveSession(yandex, controller, playback, scope)
+    /** The user's own playlists; [library] is the music on the device. */
+    val userLibrary = UserLibrary(playlists, tracks, scope)
+    val cloudSync = CloudSync(integrations.account, integrations.sync, userLibrary, settings)
+    val exporter = Exporter(resolver, downloader, images, paths, host.tagEditor, scope)
+    val stats = StatsModel(listenStats, scope)
+
+    val yandexCatalog = YandexCatalog(yandex, tracks)
+    val catalogs = ServiceCatalogs(integrations, settings, tracks, paths.cache, paths.separator)
+    val search = MultiSearch(
+        integrations = integrations,
+        yandex = yandexCatalog,
+        library = userLibrary,
+        settings = settings,
+        yandexSignedIn = { yandex.api != null },
+        cacheRoot = paths.cache,
+        separator = paths.separator,
+    )
 
     private val services = mutableListOf<AppService>(
         ListenLogger(controller, settings, listenStats, scope),
@@ -132,6 +170,21 @@ class QuarkApp(host: QuarkHost) {
         started = true
         playback.start()
         services.forEach(AppService::start)
+        scope.launch { restoreFromAccount() }
+    }
+
+    /**
+     * With a quark account, the playlists are synced and a Yandex token kept
+     * in the cloud is brought down — signing in on a second machine should
+     * not mean signing in to every service again.
+     */
+    private suspend fun restoreFromAccount() {
+        val account = integrations.account
+        if (!account.isLoggedIn) return
+        if (!settings.current.yandex.isAuthorised) {
+            account.yandexToken()?.takeIf(String::isNotBlank)?.let { yandex.signIn(it) }
+        }
+        cloudSync.run()
     }
 
     suspend fun shutdown() {

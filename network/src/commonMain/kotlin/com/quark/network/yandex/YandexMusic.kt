@@ -49,6 +49,9 @@ class YandexMusic(private val client: YandexClient) {
 
     val token: String get() = client.token
 
+    /** The signed-in account's uid; 0 until [authorise] has run. */
+    val accountId: Long get() = client.userId
+
     /** Signs in and remembers the account id every other call needs. */
     suspend fun authorise(): AccountStatusDto {
         val status = decode(client.get("/account/status"), AccountStatusDto.serializer())

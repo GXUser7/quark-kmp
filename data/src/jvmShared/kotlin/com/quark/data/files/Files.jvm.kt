@@ -44,6 +44,28 @@ actual object Files {
     actual fun directorySize(directory: String): Long =
         File(directory).walkBottomUp().filter(File::isFile).sumOf(File::length)
 
+    actual fun head(path: String, count: Int): ByteArray = runCatching {
+        File(path).inputStream().use { input ->
+            val buffer = ByteArray(count)
+            var read = 0
+            while (read < count) {
+                val n = input.read(buffer, read, count - read)
+                if (n < 0) break
+                read += n
+            }
+            buffer.copyOf(read)
+        }
+    }.getOrDefault(ByteArray(0))
+
+    actual fun move(from: String, to: String) {
+        val target = File(to)
+        target.parentFile?.mkdirs()
+        if (!File(from).renameTo(target)) {
+            File(from).copyTo(target, overwrite = true)
+            File(from).delete()
+        }
+    }
+
     actual fun clearDirectory(directory: String): Long {
         var freed = 0L
         File(directory).listFiles()?.forEach { child ->

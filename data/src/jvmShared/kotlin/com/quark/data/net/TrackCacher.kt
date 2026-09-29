@@ -107,6 +107,9 @@ class TrackCacher(
         throw lastFailure ?: IllegalStateException("Caching failed without an error")
     }
 
+    override suspend fun downloadTo(source: DownloadSource, target: String) =
+        permits.withPermit { download(source, Paths.get(target)) }
+
     private suspend fun download(source: DownloadSource, target: Path) {
         val response = http.get(source.url) {
             headers { source.headers.forEach { (name, value) -> append(name, value) } }

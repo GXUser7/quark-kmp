@@ -26,4 +26,7 @@ interface TrackDownloader {
         tracks: List<Track>,
         source: suspend (Track) -> DownloadSource?,
     ): List<String>
+
+    /** Downloads [source] to [target], replacing it only once the whole file arrived. */
+    suspend fun downloadTo(source: DownloadSource, target: String)
 }

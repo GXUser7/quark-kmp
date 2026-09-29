@@ -1,6 +1,12 @@
 package com.quark.app
 
+import com.quark.app.desktop.DiscordPresence
+import com.quark.app.desktop.LocalApiService
+import com.quark.app.export.TagEditor
 import com.quark.app.player.LibraryWatcher
+import com.quark.data.local.AudioTags
+import com.quark.data.local.TagWriter
+import java.io.File
 import com.quark.data.db.DatabaseFactory
 import com.quark.data.images.CoverCache
 import com.quark.data.local.DesktopLibrary
@@ -47,6 +53,19 @@ object DesktopQuark {
             downloader = TrackCacher(http),
             io = io,
             main = Dispatchers.Swing,
+            tagEditor = TagEditor { path, tags ->
+                TagWriter.write(
+                    File(path),
+                    AudioTags(
+                        title = tags.title,
+                        artist = tags.artist,
+                        album = tags.album,
+                        trackNumber = tags.trackNumber,
+                        trackTotal = tags.trackTotal,
+                        coverData = tags.cover,
+                    ),
+                )
+            },
         )
 
         QuarkApp(host).also { app ->
@@ -61,6 +80,8 @@ object DesktopQuark {
                     scope = app.scope,
                 )
             )
+            app.attach(DiscordPresence(app.controller, settings, app.scope))
+            app.attach(LocalApiService(app.controller, settings, app.scope))
             app.start()
         }
     }

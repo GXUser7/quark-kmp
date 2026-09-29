@@ -42,6 +42,13 @@ class YandexSession(
     /** Present only while signed in; every call needs the account id. */
     val api: YandexMusic? get() = _api.value
 
+    /** [api] as it comes and goes, for things that load once the account is there. */
+    val apiFlow: StateFlow<YandexMusic?> = _api.asStateFlow()
+
+    /** Cache root and separator for the tracks this session builds. */
+    var cacheRoot: String = ""
+    var separator: String = "/"
+
     private val _state = MutableStateFlow<YandexState>(YandexState.SignedOut)
     val state: StateFlow<YandexState> = _state.asStateFlow()
 

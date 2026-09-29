@@ -65,16 +65,11 @@ class QuarkSourceResolver(
             }
             DownloadSource(url)
         }
-        is YtMusicTrack -> {
-            val direct = track.streamUrl
-            if (direct != null) {
-                // The backend hands out urls that only work for a client claiming
-                // to be the Android app, as in the Dart build.
-                DownloadSource(direct, mapOf("User-Agent" to YOUTUBE_USER_AGENT))
-            } else {
-                fromRegistered(track)
-            }
-        }
+        // A fresh url from the backend first — the one a playlist came with
+        // expires within hours — and that one only when the backend is out of
+        // reach. Its urls work for a client claiming to be the Android app.
+        is YtMusicTrack -> runCatching { fromRegistered(track) }.getOrNull()
+            ?: track.streamUrl?.let { DownloadSource(it, mapOf("User-Agent" to YOUTUBE_USER_AGENT)) }
         else -> fromRegistered(track)
     }
 
