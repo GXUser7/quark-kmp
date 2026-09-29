@@ -37,11 +37,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(project(":core"))
-            api(project(":player"))
-            api(project(":data"))
-            api(project(":network"))
-            api(project(":platform"))
+            api(project(":services"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.ui)
@@ -53,6 +49,7 @@ kotlin {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
+            implementation(libs.jaudiotagger)
             implementation(libs.jna)
             implementation(libs.jna.platform)
         }

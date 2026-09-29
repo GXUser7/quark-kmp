@@ -27,6 +27,40 @@ SELECT * FROM playlists WHERE id = ?;
 create:
 INSERT INTO playlists (title) VALUES (?);
 
+-- 'Playlist' and 'Album' are the user's; 'Session' rows are the snapshots kept
+-- to restore the last playlist on startup and never shown as the user's own.
+createTyped:
+INSERT INTO playlists (title, type) VALUES (?, ?);
+
+selectUser:
+SELECT p.*, (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist = p.id) AS track_count
+FROM playlists p
+WHERE p.type != 'Session'
+ORDER BY p.id DESC;
+
+selectUserByTitle:
+SELECT * FROM playlists WHERE title = ? AND type != 'Session' LIMIT 1;
+
+setDescription:
+UPDATE playlists SET description = ? WHERE id = ?;
+
+setCoverUrl:
+UPDATE playlists SET cover_url = ? WHERE id = ?;
+
+removeTrack:
+DELETE FROM playlist_tracks WHERE playlist = ? AND track = ?;
+
+setPosition:
+UPDATE playlist_tracks SET position = ? WHERE playlist = ? AND track = ?;
+
+firstCoverOf:
+SELECT kt.cover_url, kt.cover_path, kt.path
+FROM known_tracks kt
+INNER JOIN playlist_tracks pt ON pt.track = kt.id
+WHERE pt.playlist = ?
+ORDER BY pt.position ASC
+LIMIT 1;
+
 rename:
 UPDATE playlists SET title = ? WHERE id = ?;
 

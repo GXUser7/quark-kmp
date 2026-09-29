@@ -45,8 +45,3 @@ interface Platform {
 
 val Platform.isDesktop: Boolean get() = kind == DeviceKind.Desktop
 val Platform.isAndroid: Boolean get() = kind == DeviceKind.Android
-
-/** The [Platform] the interface is running on, for composables that need it directly. */
-val LocalPlatform = androidx.compose.runtime.staticCompositionLocalOf<Platform> {
-    error("LocalPlatform is provided by QuarkRoot")
-}

@@ -13,6 +13,7 @@ kotlin {
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
     }
+    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
     sourceSets {
         commonMain.dependencies {
             api(project(":core"))

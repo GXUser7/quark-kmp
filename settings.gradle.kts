@@ -27,4 +27,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "quark-kmp"
 
-include(":core", ":network", ":data", ":player", ":platform", ":app", ":androidApp")
+include(":core", ":network", ":data", ":player", ":platform", ":services", ":app", ":androidApp")

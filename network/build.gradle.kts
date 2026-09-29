@@ -49,6 +49,9 @@ kotlin {
             implementation(libs.ktor.client.mock)
             implementation(libs.kotlinx.coroutines.test)
         }
+        jvmTest.dependencies {
+            implementation(libs.ktor.server.test.host)
+        }
     }
 }
 
