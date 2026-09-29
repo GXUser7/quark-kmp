@@ -1,8 +1,7 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // Kotlin itself comes from AGP 9's built-in support; only the Compose
+    // compiler plugin has to be applied.
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -80,11 +79,6 @@ android {
         checkReleaseBuilds = false
         abortOnError = false
     }
-}
-
-kotlin {
-    jvmToolchain(21)
-    compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }
 
 dependencies {
