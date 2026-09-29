@@ -13,6 +13,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.runBlocking
+import com.quark.app.desktop.WindowChrome
 import com.quark.app.desktop.WindowsMediaControls
 import org.jetbrains.skia.Image
 
@@ -36,6 +37,7 @@ fun main() = application {
             return@Window
         }
         val platform = remember { DesktopPlatform { window } }
+        WindowChrome(window, app)
         LaunchedEffect(app) {
             if (WindowsMediaControls.isWindows) {
                 app.attach(WindowsMediaControls(app.controller, app.settings, app.scope) { window.windowHandle })

@@ -1,241 +1,154 @@
 # Что сделано и что осталось
 
-Документ для того, кто продолжит перенос. Читать после [MIGRATION.md](MIGRATION.md)
-(что переносим и почему) и [PLAN.md](PLAN.md) (разбивка по этапам). Разбор оригинала —
-в [analysis/](analysis/), там же протоколы всех интеграций со ссылками на файлы и строки.
-
-Оригинал лежит рядом: `E:\Projects\quark`, коммит `bd61c35`. Он не трогается.
-
----
-
-## 1. Как собрать и запустить
-
-Тулчейн не зарегистрирован в системе — в PATH по умолчанию только JRE 8, и без этой
-строки сборка падает сразу:
-
-```bash
-source /e/Projects/.tools/env.sh
-```
-
-Дальше обычно:
-
-```bash
-./gradlew build          # сборка и тесты
-./gradlew :app:run       # запустить плеер
-./gradlew :app:jvmTest   # среди прочего перерисует превью в app/build/preview
-```
-
-Две особенности окружения, обе уже учтены в репозитории:
-
-* **Maven Central рвёт TLS-handshake именно с JDK** («Remote host terminated the
-  handshake»), хотя curl на тот же URL отдаёт 200. Лечится `systemProp.https.protocols=TLSv1.2`
-  в `gradle.properties`. Если сборка вдруг переедет в другую сеть — строку можно убрать.
-* **libmpv весит 115 МБ и в git не лежит.** Таска `:app:fetchMpv` качает официальную сборку
-  и `7zr.exe` (архив использует фильтр BCJ2, который не берут ни py7zr, ни commons-compress),
-  распаковывает `libmpv-2.dll` в `app/resources/windows-x64/`. `run` и упаковка от неё зависят,
-  так что свежий клон заводится сам. Контрольные суммы закреплены в `app/build.gradle.kts`.
+Документ для того, кто продолжит работу. Перенесены обе ветки оригинала
+([z3nsh0w/quark](https://github.com/z3nsh0w/quark)): `main` (исправления) и `slop` (новый
+функционал). Контекст решений — в [MIGRATION.md](MIGRATION.md) и [PLAN.md](PLAN.md), разбор
+оригинала по файлам — в [analysis/](analysis/), визуальный язык — в [decisions/](decisions/).
 
 ---
 
-## 2. Модули и правила
+## 1. Сборка
 
-| Модуль | Что внутри | Зависит от |
+Нужны JDK 21 и, для Android, Android SDK.
+
+```bash
+./gradlew :app:run                          # десктопный плеер
+./gradlew jvmTest                           # все тесты, включая отрисовку каждого экрана
+./gradlew :androidApp:assembleDebug         # APK
+./gradlew :app:packageMsi :app:packageExe   # установщики Windows (собирать на Windows)
+```
+
+Стек: Kotlin 2.3, Compose Multiplatform 1.11, Gradle 9.7, AGP 9.4 (плагин
+`com.android.kotlin.multiplatform.library` для библиотечных модулей и встроенный Kotlin в
+`androidApp`), SQLDelight 2.3, Ktor 3.4, Media3.
+
+**CI** — [.github/workflows/build.yml](../.github/workflows/build.yml), на каждый push:
+
+| Джоб | Что делает | Артефакт |
 | --- | --- | --- |
-| `core` | Доменные модели, очередь, shuffle, настройки, LRC, палитра, `TimedCache`. Без IO. | — |
-| `data` | SQLDelight, репозитории, чтение тегов, сканер, дисковый кеш обложек, хранилище настроек. | `core` |
-| `network` | Ktor-клиенты. Сейчас только Яндекс. | `core` |
-| `player` | `AudioEngine`, `PlayerController`, биндинг libmpv. | `core` |
-| `platform` | `AppDirs`. Сюда же пойдут SMTC/MPRIS. | `core` |
-| `app` | Compose-интерфейс, view-модели, склейка. | всё |
+| JVM tests | `jvmTest` всех модулей; `AppRenderTest` собирает приложение целиком (без сети и звука) и рисует каждый экран, телефонную ширину, светлую тему и русский язык | — |
+| Android APK | `assembleRelease` + `assembleDebug` | `quark-android` |
+| Windows installer | тест SMTC против настоящего окна, затем `packageMsi`, `packageExe`, portable zip | `quark-windows` |
+| Release | только на тегах `v*`: выкладывает оба артефакта в GitHub Release | — |
 
-`core`, `data`, `network`, `player` держат код в `commonMain` и трогают платформу только
-через `expect`/`actual` — добавление Android или iOS не потребует переносить файлы.
-`platform` и `app` намеренно JVM-ные.
+Подпись APK: без секретов release подписывается debug-ключом. Свой ключ — секреты
+`QUARK_KEYSTORE_BASE64`, `QUARK_KEYSTORE_PASSWORD`, `QUARK_KEY_ALIAS`, `QUARK_KEY_PASSWORD`.
 
-**Правила, которые стоит соблюдать дальше.**
-
-* **Никакого Material.** `MaterialTheme`, `Button`, `Slider`, `Card` не используются:
-  они тянут свою палитру, формы и ripple. Есть `QuarkTheme` с токенами и свои контролы
-  в `app/ui/`. Иконки берутся из `material-icons-extended`, потому что оригинал сам
-  использует `material_symbols_icons`, и это только векторные контуры.
-* **Стекло — через `GlassSurface`**, три рецепта в `Glass.Panel` / `Glass.Card` /
-  `Glass.Dialog`. Откуда взяты значения — в [decisions/02-visual-language.md](decisions/02-visual-language.md).
-* **Экраны не знают про view-модели.** `PlayerScreen` принимает интерфейс `PlayerUi`,
-  `LyricsScreen` — готовое состояние. Благодаря этому их рисует `UiPreviewTest` без движка
-  и без базы. Новые экраны делать так же.
-* **Состояние — один `StateFlow` на область.** Не плодить по нотификатору на поле, как было
-  в оригинале (38 штук в одном сервисе).
-* **Комментарии объясняют «почему», а не «что».** Если поведение повторяет оригинал или
-  намеренно от него отходит — сказать об этом и сослаться на файл и строку в Dart.
-* **Тесты там, где есть логика.** Сейчас 75. Чистые вещи (`core`) покрыты, сеть — через
-  Ktor `MockEngine`, движок — против настоящего libmpv.
+libmpv (115 МБ) в git не лежит: на Windows его качает `:app:fetchMpv` (контрольные суммы
+закреплены в `app/build.gradle.kts`), на Linux/macOS берётся системный.
 
 ---
 
-## 3. Что уже работает
+## 2. Модули
 
-**Воспроизведение.** libmpv через свой JNA-биндинг (`player/src/jvmMain/.../mpv/`).
-Gapless настоящий: следующий трек отдаётся mpv через `loadfile … append`, пока текущий
-играет, а переход распознаётся по росту `playlist-pos`. Поэтому **завершение трека и
-переключение — разные пути**: на `EngineEvent.Completed` контроллер только догоняет
-состояние и предзагружает следующий, ничего не открывая. 12 тестов, из них 4 против
-настоящей библиотеки.
+| Модуль | Что внутри |
+| --- | --- |
+| `core` | Модели, очередь и shuffle, настройки, LRC, палитра, аналитика прослушиваний. Без IO. |
+| `data` | SQLDelight (схема = Drift оригинала), репозитории, теги, сканеры библиотеки (папки на десктопе; MediaStore и SAF на Android), кеши, `Files`. |
+| `network` | Яндекс.Музыка; бэкенд quarkaudio.ru (аккаунт, синхронизация, YouTube, VK); Spotify; SoundCloud; локальное API v0 + mDNS (desktop). |
+| `player` | `AudioEngine`, `PlayerController`; движки libmpv (JNA) и Media3. |
+| `platform` | Каталоги приложения на каждой ОС, Discord IPC. |
+| `services` | Граф приложения без UI: `QuarkApp`, сессии, каталоги, мульти-поиск, синхронизация, экспорт, статистика. Собирается и тестируется на чистой JVM. |
+| `app` | Compose-интерфейс для обеих платформ + десктопное приложение (окно, пикеры, SMTC, drag-and-drop). |
+| `androidApp` | Activity, `MediaSessionService` с уведомлением, манифест. |
 
-**Очередь и порядок.** `core/player/PlaybackQueue.kt` — порт `_getNext`/`_getPrevious`/
-`playCustom` без IO, три режима shuffle, 20 тестов.
+Код по умолчанию в `commonMain`. `jvmShared` — общий для десктопа и Android код на
+java.io/nio (подключён в оба source set'а). В платформенных source set'ах — только то, что
+действительно различается.
 
-**Хранилище.** Схема SQLDelight совпадает с Drift колонка в колонку, существующий
-`quark.db` открывается без миграции (`data/src/jvmMain/.../db/DatabaseFactory.kt`).
-Репозитории треков, плейлистов и статистики.
+**Правила** (соблюдались, стоит держаться и дальше):
 
-**Настройки.** Одна модель `core/settings/Settings.kt`, атомарная запись в json,
-битый файл откладывается в `.broken`.
+* **Никакого Material.** Свои контролы в `app/ui/`, `QuarkTheme` с токенами, стекло через
+  `GlassSurface` (три рецепта `Glass.Panel/Card/Dialog`, для светлой темы — `forLight()`).
+  Иконки — `material-icons-extended`, это только векторы.
+* **Экраны получают всё через `Shell`** (`app/shell/Shell.kt`): проиграть, в очередь, в
+  плейлист, перейти к альбому/артисту, экспорт. Навигация — один back stack (`nav/Navigator.kt`).
+* **Все строки — в `i18n/Strings.kt`.** Русский (`Russian.kt`) покрывает всё; остальные
+  10 языков — ключи `.arb` оригинала плюс основные слова (`Translations.kt`). Новый текст —
+  новое свойство в `Strings` и его перевод в `RussianStrings`.
+* **Состояние — `StateFlow` на область**, без нотификатора на каждое поле.
 
-**Яндекс.Музыка.** Аккаунт, плейлисты, треки, альбомы, артисты, поиск, подписанные
-ссылки на файл, тексты, «Моя волна» (сессия, дозагрузка, фидбек). Подписи покрыты тестами
-против эталонов, посчитанных независимо. Вход — через системный браузер и вставку адреса
-или токена; почему не автоматом, написано в `network/yandex/YandexOAuth.kt`.
+---
 
-**Локальная библиотека.** Теги через jaudiotagger, обход папок с прогрессом.
+## 3. Что перенесено
 
-**Интерфейс.** Стартовый экран, плеер в трёх раскладках по размеру окна, панель плейлиста
-с поиском, тексты с подсветкой строки, настройки, визуализатор «Моей волны» на SkSL,
-`CometLoader`. Обложки декодируются через Skia, из них же берутся акцентные цвета.
+**Воспроизведение.** libmpv на десктопе (настоящий gapless через `loadfile append`), Media3
+на Android (gapless через плейлист ExoPlayer, HLS для VK, заголовки на каждый URL). Очередь,
+три режима shuffle, повтор, скорость, громкость колесом мыши, восстановление сессии при
+запуске (трек, позиция, плейлист — через SQLite-снимок, работает офлайн).
+
+**Библиотека.** Папки и файлы, MediaStore на Android, слежение за папками, drag-and-drop в
+окно, теги и обложки (jaudiotagger / MediaMetadataRetriever). Свои плейлисты с треками из
+любых источников: создать, переименовать, описание, убрать трек, удалить.
+Синхронизация плейлистов через аккаунт quark. Экспорт в файлы с тегами и обложкой,
+кеширование плейлиста для офлайна. Статистика прослушиваний (время, топы, часы, дни недели,
+серии, сессии).
+
+**Яндекс.Музыка.** Вход (браузер + вставка адреса на десктопе, WebView на Android), плейлисты
+с «Мне нравится», лайки/дизлайки, «Моя волна» с фидбеком и подкачкой, станции по треку и
+артисту, чарт, новинки, альбомы, артисты (популярное, альбомы, «участвует в», похожие,
+плейлисты), поиск, тексты с синхронизацией, свои плейлисты (создать, переименовать,
+публичность, удалить, добавить и убрать треки, загрузить свои файлы), качество lossless/nq/lq.
+
+**Другие сервисы.** Spotify (OAuth, плейлисты и Liked; звук ищется по ISRC через Tidal/GDStudio,
+затем YouTube), SoundCloud (профиль по ссылке, лайки, треки, поиск плейлистов, OAuth-токен для
+Go+), VK Музыка (через аккаунт quark: токен Kate или логин/пароль; моя музыка, популярное,
+плейлисты), YouTube Music (поиск; плейлисты по cookies.txt). Мульти-поиск по всем сразу.
+
+**Аккаунт quark.** Регистрация, вход, сброс пароля по коду, подтверждение почты, смена пароля,
+профиль; токен Яндекса хранится в аккаунте и подтягивается на новом устройстве.
+
+**Интеграции.** SMTC на Windows (оверлей, экран блокировки, медиаклавиши), уведомление и
+lock screen на Android (MediaSession), Discord Rich Presence, локальное API v0 (контракт не
+менялся; тесты против Ktor test host) и mDNS, горячие клавиши (Esc, Ctrl+F, Ctrl+стрелки,
+медиаклавиши).
+
+**Интерфейс.** Главная (продолжить слушать, сетка сервисов, ваши плейлисты), экран
+коллекции для любого списка треков, меню трека как в оригинале, плеер в трёх раскладках
+по высоте окна + телефонная, мини-плеер, панель плейлиста с очередью, перетаскиванием и
+фильтром по альбому/артисту, тексты, визуализатор на SkSL/AGSL, увеличение обложки, светлая
+и тёмная тема, 12 языков.
 
 ---
 
 ## 4. Что осталось
 
-Порядок внутри разделов — по убыванию пользы.
-
-### 4.1. Довести библиотеку и воспроизведение
-
-| Задача | Куда | Откуда брать |
-| --- | --- | --- |
-| **Восстановление сессии при запуске.** `Settings.memory` (последний трек, позиция, плейлист) смоделирован, но никто его не пишет и не читает. | `app/QuarkApp.kt`, `app/player/PlayerViewModel.kt` | `database.dart:261-310` (`_LastTrackPositionSaver`, порог 2 сек, запись раз в 15 сек) |
-| **Логирование прослушиваний.** `ListenStatsRepository` готов, но `controller.trackChanges` никуда не подписан. Писать, если играл больше 10 секунд. | новый `app/stats/ListenLogger.kt` | `services/database/listen_logger.dart` |
-| **Сохранение плейлистов в БД.** Репозиторий есть, приложение им не пользуется — открытая папка живёт только в памяти. | `app/player/PlayerViewModel.kt` | — |
-| **Кеширование стримов на диск.** `PlaybackSettings.cacheRemoteTracks` не действует. Нужен аналог `NetConductor`: окно −1/0/+1 вокруг текущего трека, пул на 8 загрузок, 3 попытки с экспоненциальной задержкой. | новый `data/net/TrackCacher.kt` | `services/player/net_player.dart` |
-| **CUE.** Формат простой, парсер свой. | `core/cue/CueSheet.kt` + тесты | замена `dart_cue` |
-| **Слежение за папками.** `java.nio.file.WatchService`. Включается `LibrarySettings.watchFolders`. | `data/local/DirectoryObserver.kt` | `services/directory_observer.dart` |
-| **Запись тегов.** | `data/local/TagWriter.kt` | `services/audio_tags/tag_writer.dart` |
-| **Цвета обложек в БД.** Таблица `cover_colors` в схеме есть, репозитория нет — палитра считается заново при каждом запуске. | `data/repository/CoverColorRepository.kt` | `drift_library_engine.dart:112-131` |
-
-### 4.2. Остальные источники
-
-| Задача | Куда | Протокол |
-| --- | --- | --- |
-| **YouTube Music** через `quarkaudio.ru`: поиск, ссылка на трек, плейлисты по cookie-файлу. | `network/ytmusic/YtMusicClient.kt` | [analysis/02](analysis/02-storage-network-platform.md) §5.2 |
-| **MusicBrainz + Cover Art Archive.** | `network/musicbrainz/` | analysis/02 §5.3 |
-| **Распознавание трека** (`/api/quark/recognizer/recognize`, multipart). | `network/recognizer/` | analysis/02 §5.3 |
-
-`YtMusicTrack` в домене уже есть, и `QuarkSourceResolver` умеет отдать его `streamUrl` —
-не хватает только клиента, который этот url добудет.
-
-### 4.3. Системные интеграции
-
-Ничего из этого пока нет; всё — в `platform`, кроме локального API.
-
-| Задача | Как | Протокол |
-| --- | --- | --- |
-| **Discord RPC.** Самое простое из списка: JSON поверх named pipe `\\.\pipe\discord-ipc-0` на Windows и unix-сокета `/tmp/discord-ipc-0`. App id `1520321415595954247`. | `platform/.../discord/DiscordRpc.kt` | analysis/02 §5.4, поля активности перечислены |
-| **Локальное API.** HTTP + WebSocket на Ktor Server, случайный порт, запись его в `AppDirs.portFile`. **Контракт v0 ломать нельзя** — у него есть внешние клиенты. | `network/localapi/LocalApiServer.kt` | `E:\Projects\quark\lib\services\local_api\README.md` целиком, плюс analysis/02 §5.5 |
-| **mDNS.** jmdns, имя `quark`, тип `_quarkaudio._tcp`, атрибуты `{version: 0, path: /api}`. | `network/localapi/ServiceBroadcast.kt` | analysis/02 §5.5 |
-| **MPRIS2 (Linux).** `dbus-java`, интерфейсы `org.mpris.MediaPlayer2` и `…MediaPlayer2.Player`. | `platform/.../linux/Mpris.kt` | analysis/02 §6.1 |
-| **SMTC (Windows).** Самое тяжёлое: WinRT через JNA или Panama. В оригинале это делал Rust-мост. | `platform/.../windows/Smtc.kt` | analysis/02 §6.1 |
-| **Drag-and-drop файлов в окно.** `java.awt.dnd.DropTarget`, `DataFlavor.javaFileListFlavor`. | `app/DragAndDrop.kt` | `widgets/drag_drop.dart` |
-
-Фасад над SMTC/MPRIS стоит свести к одному интерфейсу (`platform/NativeControls.kt`),
-который подписывается на `PlayerController.trackChanges` и `state`.
-
-### 4.4. Экраны
-
 | Задача | Замечания |
 | --- | --- |
-| **Очередь.** Панель есть, содержимое очереди в ней не показано и не переставляется мышью. | `state.queue` уже в `PlayerState` |
-| **«Моя волна».** Клиент готов (`startWave`, `waveTracks`, `sendWaveFeedback`), визуализатор готов — нет экрана и подкачки треков в очередь по мере проигрывания. Фидбек (`trackStarted`, `trackFinished`, `skip`) слать обязательно, иначе волна начинает повторяться. | `network/yandex/YandexMusic.kt` |
-| **Альбом и артист.** Данные в клиенте есть (`album`, `artist`, `artistTracks`, `artistAlbums`). | в оригинале — `widgets/media_cards/` |
-| **Поиск по Яндексу.** Сейчас поиск фильтрует только открытый плейлист. Включается `YandexSettings.searchEnabled`. | `api.search` готов |
-| **Статистика прослушиваний.** `ListenStatsRepository.topTracks` и `totalSeconds` готовы. | `widgets/listen_stats/` |
-| **Увеличение обложки** по клику. | `main_player.dart`, `toggleCover` |
-| **Хром окна.** Оригинал на Linux подменяет `GtkHeaderBar` и красит его градиентом из обложки, на Windows включает тёмный заголовок через `DwmSetWindowAttribute`. В Compose разумнее `undecorated = true` и свой заголовок; тёмная рамка на Windows — JNA-вызов `dwmapi.dll`. | analysis/02 §6.2–6.3 |
-
-### 4.5. Дистрибутив
-
-* `jpackage` уже настроен на MSI и deb, но нет иконок и метаданных.
-* `fetchMpv` качает только Windows-сборку. Для Linux ожидается системный `libmpv.so.2`
-  (загрузчик его найдёт), для macOS — либо brew, либо класть `libmpv.dylib` в
-  `app/resources/macos-*`.
-* **Перенос данных из Flutter-установки.** `AppDirs.legacySupport` и `legacyCache` уже
-  указывают на старые каталоги, но ими никто не пользуется. `quark.db` открывается как есть,
-  а вот настройки лежат в Hive — это собственный бинарный формат, и читать его придётся
-  руками (кадры с CRC32) либо смириться с тем, что токен и последний плейлист пользователь
-  введёт заново.
+| **MPRIS2 (Linux).** | `dbus-java`, интерфейсы `org.mpris.MediaPlayer2` и `.Player`; повесить как `AppService`, по образцу `WindowsMediaControls`. |
+| **Обложки локальных треков в SMTC.** | `RandomAccessStreamReference.CreateFromUri` берёт только http(s); для файлов нужен `CreateFromStream` с `InMemoryRandomAccessStream`. |
+| **Перенос настроек из Flutter-установки.** | `quark.db` открывается как есть, но настройки оригинала лежат в Hive (свой бинарный формат); токены придётся ввести заново. |
+| **MusicBrainz, распознавание трека.** | `/api/quark/recognizer/recognize` на бэкенде; в `slop` это было экспериментом. |
+| **Концерты на странице артиста, обложки плейлистов Яндекса.** | API есть, экранов нет. |
+| **Хром окна.** | Оригинал красил заголовок из обложки (Linux) и включал тёмную рамку через `DwmSetWindowAttribute` (Windows). |
+| **libmpv для macOS.** | `fetchMpv` качает только Windows-сборку. |
 
 ---
 
-## 5. Грабли, на которые уже наступили
+## 5. Грабли
 
-Это всё стоило времени; повторять не надо.
+* **Сеть, в которой делался перенос, не пускала на dl.google.com** (Google Maven). Android и
+  Compose поэтому проверялись в CI. Локально работала «теневая» сборка без Android-плагина:
+  она компилирует все модули под JVM, а `app` — против Compose 1.11 с Maven Central, подменяя
+  только `runtime` на 1.8.2 (последний, который JetBrains ещё собирал сами; с 1.9 это артефакты
+  Google). Для проверки типов этого хватает; запускать Compose так нельзя — нет `androidx.collection`.
+* **AGP 8.x не работает с Gradle 9.6+.** Отсюда AGP 9 и плагин
+  `com.android.kotlin.multiplatform.library`; у библиотечных модулей нет своих манифестов.
+* **В `jvmShared` нельзя Java 10+ API**, которых нет на старых Android (`URLEncoder(…, Charset)`,
+  `Files.writeString`) — сборка пройдёт, а приложение упадёт на API < 33.
+* **GET с телом.** Бэкенд YouTube принимает JSON в теле GET-запроса; OkHttp такое не отправляет,
+  поэтому `YtMusicClient` ходит через движок CIO.
+* **SMTC — это WinRT через JNA.** Индексы методов и IID в `Smtc.kt` сверены с ABI; IID
+  делегата кнопок вычисляется по правилам WinRT, и тест это проверяет. Всё выполняется на
+  одном потоке в MTA и в защищённом режиме JNA: при сбое интеграция отключается, плеер живёт.
+* **`mpv_observe_property` отдаёт текущее значение сразу после подписки**, а `SharedFlow` без
+  replay теряет события до подписки — поэтому в `PlayerController` есть `listening` и
+  `onSubscription`, а не `onStart`.
+* **SkSL — не GLSL**, и ошибка в шейдере не ломает сборку: `RuntimeEffect.makeForShader` вернёт
+  null. Поэтому есть `VibeShaderTest`.
+* **`Modifier.blur` размывает сам компонент, а не фон.** Стекло сделано выборкой известной
+  картинки (размытой обложки) по координатам компонента — `app/ui/Glass.kt`.
+* **Ключи ленивых списков** должны быть уникальны и стабильны: в плейлисте может быть один и
+  тот же трек дважды, поэтому ключ — путь плюс номер копии (`stableKeys`).
 
-* **`mpv_observe_property` отдаёт текущее значение сразу после подписки.** Из-за этого
-  движок считал себя играющим ещё до того, как кто-то подписался на события, и настоящий
-  старт потом глушился дедупликацией. Вывод: не фильтровать повторы в `emitPlaying` —
-  вниз по потоку `StateFlow`, он и так схлопывает.
-* **`SharedFlow` без replay теряет событие, если подписчик не успел.** `onStart` не спасает:
-  он выполняется **до** регистрации подписки. Нужен `onSubscription`. В `PlayerController`
-  из-за этого появился `listening: CompletableDeferred`, который `start()` ждёт.
-* **Очередь в оригинале ставит точку возврата даже когда очереди нет.** После клика по треку
-  в плейлисте `_getNext()` возвращал тот же самый трек. С настоящим gapless это играло бы
-  трек дважды; в порте точка возврата ставится только при открытой очереди.
-* **SkSL — не GLSL.** `vec2/3/4` не существуют, цикл должен разворачиваться (счётчик `int`),
-  вход — параметр `main`, выход — возврат `half4`. И главное: **ошибка в шейдере не ломает
-  сборку**, `RuntimeEffect.makeForShader` просто вернёт null и визуализатор молча исчезнет.
-  Поэтому есть `VibeShaderTest`.
-* **Униформы шейдера лучше задавать по имени** через `RuntimeShaderBuilder`, а не паковать
-  буфер: выравнивание `float3` легко перепутать, и проявится это только неправильными
-  цветами.
-* **`Modifier.blur` в Compose размывает сам компонент, а не фон под ним.** Backdrop-эффект
-  здесь сделан выборкой известной картинки по координатам компонента — см. `app/ui/Glass.kt`.
-
-Дефекты самого оригинала, которые сознательно не перенесены, перечислены
-в [MIGRATION.md](MIGRATION.md) §8.
-
----
-
-## 6. Быстрая карта кода
-
-```
-core/
-  model/        Track (sealed), Playlist, Cover
-  player/       PlaybackQueue, Shuffles, PlayerState
-  settings/     Settings, SettingsStore
-  lyrics/       LrcParser
-  color/        AccentPalette
-  util/         TimedCache
-data/
-  db/           DatabaseFactory  (+ схема в src/commonMain/sqldelight)
-  repository/   TrackRepository, PlaylistRepository, ListenStatsRepository
-  local/        TagReader, LibraryScanner
-  images/       CoverCache
-  settings/     JsonSettingsStore
-network/
-  yandex/       YandexClient, YandexMusic, YandexSignatures, YandexOAuth, dto/
-player/
-  AudioEngine, PlayerController
-  mpv/          LibMpv (JNA), MpvHandle, MpvLibraryLoader
-  MpvAudioEngine
-platform/
-  AppDirs
-app/
-  QuarkApp          склейка всего
-  QuarkSourceResolver
-  theme/            QuarkTheme, Glass, токены
-  ui/               GlassSurface, CircleButton, ThinSlider, CometLoader
-  image/            CoverLoader, CoverBlur
-  player/           PlayerUi, PlayerViewModel, PlayerScreen
-  yandex/           YandexSession, YandexViewModel, YandexScreen
-  lyrics/           LyricsViewModel, LyricsScreen
-  settings/         SettingsScreen
-  vibe/             VibeShader (SkSL), VibeAnimation
-```
+Дефекты самого оригинала, сознательно не перенесённые, — в [MIGRATION.md](MIGRATION.md) §8.
