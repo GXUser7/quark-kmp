@@ -184,11 +184,12 @@ fun SettingsScreen() {
                     ) { value -> store.update { it.copy(appearance = it.appearance.copy(transitionSpeed = value)) } }
 
                     // --- Integrations ---
-                    Section(s.integrations)
-                    Toggle(s.nativeControls, s.nativeControlsHint, settings.integrations.nativeControls) { on ->
-                        store.update { it.copy(integrations = it.integrations.copy(nativeControls = on)) }
-                    }
                     if (desktop) {
+                        Section(s.integrations)
+                        // Android always has its media notification; the toggle is SMTC's.
+                        Toggle(s.nativeControls, s.nativeControlsHint, settings.integrations.nativeControls) { on ->
+                            store.update { it.copy(integrations = it.integrations.copy(nativeControls = on)) }
+                        }
                         Toggle(s.discordRpc, s.discordRpcHint, settings.integrations.discordRpc) { on ->
                             store.update { it.copy(integrations = it.integrations.copy(discordRpc = on)) }
                         }

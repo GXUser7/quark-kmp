@@ -225,6 +225,9 @@ internal class Smtc private constructor(
                 release(interop)
             }
             val updater = outPointer { call(controls, CONTROLS_GET_DISPLAY_UPDATER, it) }
+            // The music properties exist only once the updater is told it shows
+            // music; before that the call fails with ERROR_NOT_SUPPORTED.
+            call(updater, UPDATER_PUT_TYPE, TYPE_MUSIC)
             val music = outPointer { call(updater, UPDATER_GET_MUSIC_PROPERTIES, it) }
             val music2 = runCatching { outPointer { call(music, QUERY_INTERFACE, guid(IID_MUSIC2), it) } }.getOrNull()
             return Smtc(controls, updater, music, music2)
