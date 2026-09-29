@@ -111,10 +111,10 @@ class AndroidPlatform(private val activity: ComponentActivity) : Platform {
         clipboard?.setPrimaryClip(ClipData.newPlainText("quark", text))
     }
 
-    override suspend fun readText(location: String): String? = withContext(Dispatchers.IO) {
+    override suspend fun readBytes(location: String): ByteArray? = withContext(Dispatchers.IO) {
         runCatching {
-            if (!location.startsWith("content:")) return@runCatching java.io.File(location).readText()
-            activity.contentResolver.openInputStream(Uri.parse(location))?.use { it.readBytes().decodeToString() }
+            if (!location.startsWith("content:")) return@runCatching java.io.File(location).readBytes()
+            activity.contentResolver.openInputStream(Uri.parse(location))?.use { it.readBytes() }
         }.getOrNull()
     }
 

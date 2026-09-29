@@ -67,6 +67,9 @@ import com.quark.app.ui.Placeholder
 import com.quark.app.ui.QIcon
 import com.quark.app.ui.QText
 import com.quark.app.ui.QTextField
+import com.quark.app.ui.WebSignInDialog
+import com.quark.app.ui.WebSignInSpec
+import com.quark.app.ui.hasEmbeddedBrowser
 import com.quark.app.ui.bottomInset
 import com.quark.app.ui.rememberLoad
 import com.quark.app.yandex.WaveSession
@@ -128,17 +131,34 @@ private fun SignInCard(
     busy: Boolean,
     onSubmit: (String) -> Unit,
     modifier: Modifier = Modifier,
+    web: WebSignInSpec? = null,
     extra: @Composable () -> Unit = {},
 ) {
     val s = strings
     var pasted by remember { mutableStateOf("") }
+    var browsing by remember { mutableStateOf(false) }
+    // On Android the page opens inside the app and hands the result back by
+    // itself; elsewhere it opens in the browser and the address is pasted.
+    val inApp = web != null && hasEmbeddedBrowser
+    if (browsing && web != null) {
+        WebSignInDialog(web) { result ->
+            browsing = false
+            if (result != null) onSubmit(result)
+        }
+    }
     Box(modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.TopCenter) {
         GlassSurface(RoundedCornerShape(Radius.panel), Modifier.widthIn(max = 560.dp).fillMaxWidth(), Glass.Card) {
             Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 QText(title, Quark.type.panelTitle)
                 QText(hint, Quark.type.body, color = Quark.colors.textSecondary)
                 if (openLabel != null) {
-                    PillButton(openLabel, onOpen, icon = Icons.Filled.OpenInBrowser, modifier = Modifier.fillMaxWidth())
+                    PillButton(
+                        openLabel,
+                        { if (inApp) browsing = true else onOpen() },
+                        icon = Icons.Filled.OpenInBrowser,
+                        accent = inApp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 QTextField(
                     value = pasted,
@@ -217,6 +237,9 @@ private fun YandexSignIn(model: YandexViewModel, error: String?) {
             val token = YandexOAuth.extractToken(pasted)
             if (token == null) problem = s.pasteAddressOrToken else model.signIn(token)
         },
+        web = WebSignInSpec(YandexOAuth.authorizeUrl, extract = { address ->
+            address.takeIf { "access_token=" in it }?.let(YandexOAuth::extractToken)
+        }),
     )
 }
 
@@ -375,6 +398,9 @@ fun SpotifyScreen() {
                         }
                     }
                 },
+                web = WebSignInSpec(app.integrations.spotify.authorizeUrl, extract = { address ->
+                    address.takeIf { it.startsWith(SPOTIFY_REDIRECT) && "code=" in it }
+                }),
             )
         } else {
             val playlists by rememberLoad("spotify:playlists", generation, shell.cache) { app.catalogs.spotifyPlaylists() }
@@ -541,6 +567,11 @@ fun VkScreen() {
                         if (token == null) error = s.pasteAddressOrToken
                         else connect { app.integrations.account.saveVkToken(token); null }
                     },
+                    web = WebSignInSpec(
+                        VK_AUTH_URL.replace("display=page", "display=mobile"),
+                        extract = { address -> address.takeIf { "blank.html" in it && "access_token=" in it } },
+                        userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+                    ),
                 ) {
                     QText(s.orSignInWithPassword, Quark.type.label, color = Quark.colors.textMuted)
                     QTextField(login, { login = it }, placeholder = s.emailOrUsername, modifier = Modifier.fillMaxWidth())
@@ -573,6 +604,8 @@ private fun vkToken(pasted: String): String? {
     if (fromUrl != null) return fromUrl
     return text.takeIf { it.length >= 40 && it.none(Char::isWhitespace) && !it.contains('/') }
 }
+
+private val SPOTIFY_REDIRECT = com.quark.network.spotify.SpotifyClient.REDIRECT_URI
 
 private const val VK_AUTH_URL = "https://oauth.vk.com/authorize?client_id=2685278&scope=audio,offline" +
     "&redirect_uri=https://oauth.vk.com/blank.html&display=page&response_type=token&revoke=1"

@@ -105,7 +105,7 @@ fun QuarkRoot(app: QuarkApp, platform: Platform) {
     val scope = rememberCoroutineScope()
     val navigator = remember(app) { app.retain { Navigator() } }
     val messages = remember(scope) { Messages(scope) }
-    val dialogs = remember { DialogHost() }
+    val dialogs = remember(app) { app.retain { DialogHost() } }
     val shell = remember(app, platform, navigator) { Shell(app, platform, navigator, messages, dialogs, scope) }
     val stateHolder = rememberSaveableStateHolder()
 

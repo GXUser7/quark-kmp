@@ -24,8 +24,11 @@ sealed interface LyricsState {
     data class Ready(val lyrics: Lyrics) : LyricsState
 
     /** No words for this track, or the source would not give them up. */
-    data class Unavailable(val reason: String) : LyricsState
+    data class Unavailable(val reason: String, val problem: LyricsProblem = LyricsProblem.Failed) : LyricsState
 }
+
+/** Why there are no lyrics, for the interface to say in its own language. */
+enum class LyricsProblem { NotYandex, SignedOut, NoLyrics, Failed }
 
 /**
  * Song words for whatever is playing.
@@ -61,12 +64,12 @@ class LyricsViewModel(private val app: QuarkApp) {
 
     private suspend fun load(track: Track) {
         if (track !is YandexTrack) {
-            _state.value = LyricsState.Unavailable("Lyrics are available for Yandex Music tracks.")
+            _state.value = LyricsState.Unavailable("Lyrics are available for Yandex Music tracks.", LyricsProblem.NotYandex)
             return
         }
         val api = app.yandex.api
         if (api == null) {
-            _state.value = LyricsState.Unavailable("Sign in to Yandex Music to see lyrics.")
+            _state.value = LyricsState.Unavailable("Sign in to Yandex Music to see lyrics.", LyricsProblem.SignedOut)
             return
         }
 
@@ -76,7 +79,7 @@ class LyricsViewModel(private val app: QuarkApp) {
             // a song has no timings, and the parser reports which arrived.
             val text = api.lyrics(track.trackId, LyricsFormat.Synced)
             when {
-                text.isNullOrBlank() -> LyricsState.Unavailable("No lyrics for this track.")
+                text.isNullOrBlank() -> LyricsState.Unavailable("No lyrics for this track.", LyricsProblem.NoLyrics)
                 else -> LyricsState.Ready(LrcParser.parse(text))
             }
         } catch (e: Exception) {

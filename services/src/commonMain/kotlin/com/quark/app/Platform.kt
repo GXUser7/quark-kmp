@@ -47,8 +47,10 @@ interface Platform {
      * Reads a small text file the user picked with [pickFile], such as a
      * cookie export. A path on the desktop, a content uri on Android.
      */
-    suspend fun readText(location: String): String? =
-        runCatching { Files.readBytes(location)?.decodeToString() }.getOrNull()
+    suspend fun readText(location: String): String? = readBytes(location)?.decodeToString()
+
+    /** The bytes of a file the user picked, such as a track to upload. */
+    suspend fun readBytes(location: String): ByteArray? = runCatching { Files.readBytes(location) }.getOrNull()
 }
 
 val Platform.isDesktop: Boolean get() = kind == DeviceKind.Desktop

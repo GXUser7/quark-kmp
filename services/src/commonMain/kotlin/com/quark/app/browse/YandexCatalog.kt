@@ -26,6 +26,9 @@ class YandexCatalog(
 ) {
     private val api: YandexMusic get() = session.api ?: throw IllegalStateException("Sign in to Yandex Music first")
 
+    /** Set by the interface, so Liked and Chart are named in its language. */
+    var labels: CatalogLabels = CatalogLabels()
+
     private fun TrackDto.track(): YandexTrack = toTrack(session.cacheRoot, session.separator)
 
     suspend fun playlists(): List<CollectionSummary> =
@@ -41,7 +44,7 @@ class YandexCatalog(
         remember(tracks)
         return TrackCollection(
             key = "yandex:playlist:$ownerUid:$kind",
-            title = if (dto.isLikes) LIKED else dto.title,
+            title = if (dto.isLikes) labels.liked else dto.title,
             subtitle = dto.owner.name.ifBlank { dto.owner.login }.ifBlank { null },
             description = dto.description,
             coverUrl = dto.coverUrl(COVER),
@@ -111,7 +114,7 @@ class YandexCatalog(
         remember(tracks)
         return TrackCollection(
             key = "yandex:chart",
-            title = CHART,
+            title = labels.chart,
             tracks = tracks,
             playlistId = PlaylistId(0, CHART_KIND, PlaylistSource.YandexMusic),
             kind = CollectionKind.Chart,
@@ -164,6 +167,10 @@ class YandexCatalog(
 
     suspend fun createPlaylist(title: String): Long = api.createPlaylist(title).kind
 
+    /** Uploads one of the user's own files into their playlist [kind] (`uploadUGCTrack`). */
+    suspend fun uploadTrack(kind: Long, fileName: String, bytes: ByteArray): String =
+        api.uploadTrack(kind, fileName, bytes)
+
     suspend fun renamePlaylist(kind: Long, title: String) {
         api.renamePlaylist(kind, title)
     }
@@ -185,7 +192,7 @@ class YandexCatalog(
         val kind = kind
         return CollectionSummary(
             key = "yandex:playlist:$owner:$kind",
-            title = if (isLikes) LIKED else title,
+            title = if (isLikes) labels.liked else title,
             subtitle = owner.takeIf { it != 0L }?.let { this.owner.name.ifBlank { this.owner.login }.ifBlank { null } },
             coverUrl = coverUrl(COVER),
             trackCount = trackCount,
@@ -210,8 +217,6 @@ class YandexCatalog(
     private fun ArtistDto.summary() = ArtistSummary(id, name, coverUrl(COVER))
 
     companion object {
-        const val LIKED = "Liked"
-        const val CHART = "Chart"
         const val CHART_KIND = -2L
         private const val COVER = "400x400"
         private const val BATCH = 250

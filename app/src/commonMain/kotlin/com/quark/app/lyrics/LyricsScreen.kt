@@ -77,7 +77,14 @@ fun LyricsScreen(
             when (val current = state) {
                 is LyricsState.Ready -> LyricsBody(current, active)
                 LyricsState.Loading -> Message(strings.lyricsLoading)
-                is LyricsState.Unavailable -> Message(current.reason)
+                is LyricsState.Unavailable -> Message(
+                    when (current.problem) {
+                        LyricsProblem.NotYandex -> strings.lyricsNeedYandex
+                        LyricsProblem.SignedOut -> strings.lyricsNeedYandex
+                        LyricsProblem.NoLyrics -> strings.noLyrics
+                        LyricsProblem.Failed -> current.reason
+                    }
+                )
                 LyricsState.Idle -> Message(strings.nothingPlaying)
             }
         }

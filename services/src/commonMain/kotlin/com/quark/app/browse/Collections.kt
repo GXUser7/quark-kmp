@@ -84,3 +84,16 @@ data class SearchSection(
 )
 
 enum class SearchService { Local, Yandex, YouTube, SoundCloud, Spotify, Vk }
+
+/**
+ * The names the catalogs give the collections they make up themselves, in the
+ * interface's language; the interface sets them when the language changes.
+ */
+data class CatalogLabels(
+    val liked: String = "Liked",
+    val chart: String = "Chart",
+    val likes: String = "Likes",
+    val tracks: String = "Tracks",
+    val myMusic: String = "My music",
+    val popular: String = "Popular",
+)

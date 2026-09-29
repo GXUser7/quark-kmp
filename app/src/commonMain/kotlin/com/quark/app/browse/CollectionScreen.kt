@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
@@ -225,6 +227,9 @@ private fun MenuScope.CollectionMenuItems(
     if (yandexTracks.isNotEmpty() && collection.yandexKind == null && shell.app.yandex.api != null) {
         Item(s.addToYandexPlaylist, Icons.Filled.LibraryAdd) { shell.addToYandexPlaylist(yandexTracks) }
     }
+    if (tracks.any { it !is com.quark.core.model.LocalTrack }) {
+        Item(s.downloadOffline, Icons.Filled.CloudDownload) { shell.downloadForOffline(collection) }
+    }
     Item(s.export, Icons.Filled.Download, enabled = tracks.isNotEmpty()) { shell.export(collection) }
     collection.link?.let { link -> Item(s.copyLink, Icons.Filled.Link) { shell.copy(link) } }
 
@@ -242,6 +247,7 @@ private fun MenuScope.CollectionMenuItems(
     if (kind != null) {
         Separator()
         Item(s.rename, Icons.Filled.Edit) { shell.renameYandexPlaylist(kind, collection.title, refresh) }
+        Item(s.uploadTracks, Icons.Filled.Upload) { shell.uploadToYandex(kind, refresh) }
         collection.isPublic?.let { public ->
             Item(if (public) s.makePrivate else s.makePublic, if (public) Icons.Filled.Lock else Icons.Filled.Public) {
                 shell.attempt {

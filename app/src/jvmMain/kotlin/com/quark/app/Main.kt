@@ -23,6 +23,7 @@ fun main() = application {
         title = "quark",
         icon = icon,
         state = rememberWindowState(width = 1100.dp, height = 760.dp),
+        onPreviewKeyEvent = { event -> started.getOrNull()?.let { quarkShortcut(it, event) } ?: false },
     ) {
         val app = started.getOrNull()
         if (app == null) {

@@ -143,6 +143,12 @@ open class Strings {
     open fun exported(done: Int, failed: Int, folder: String) =
         if (failed == 0) "Saved $done tracks to $folder" else "Saved $done tracks to $folder, $failed failed"
     open val cancelExport = "Stop"
+    open val downloadOffline = "Download for offline"
+    open val caching = "Caching playlist... Please wait."
+    open fun cached(count: Int) = "Playlist was successfully cached ($count)."
+    open val uploadTracks = "Upload tracks"
+    open val uploading = "Uploading tracks... Now you can leave page."
+    open fun uploaded(done: Int, total: Int) = "Uploaded $done of $total"
     open val deletePlaylist = "Delete playlist"
     open fun deletePlaylistConfirm(title: String) = "Delete \"$title\"? The tracks stay where they are."
     open val editDescription = "Edit description"

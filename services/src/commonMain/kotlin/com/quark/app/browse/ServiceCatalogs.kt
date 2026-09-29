@@ -28,6 +28,9 @@ class ServiceCatalogs(
     private val cacheRoot: String,
     private val separator: String,
 ) {
+    /** Set by the interface, so the lists the catalogs name are in its language. */
+    var labels: CatalogLabels = CatalogLabels()
+
     // --- Spotify -----------------------------------------------------------------
 
     suspend fun spotifyPlaylists(): List<CollectionSummary> =
@@ -68,17 +71,17 @@ class ServiceCatalogs(
         val playlists = integrations.soundCloud.userPlaylists(user.id).map { it.summary() }
         val liked = CollectionSummary(
             key = "soundcloud:likes:${user.id}",
-            title = "Likes",
+            title = labels.likes,
             subtitle = user.username,
             coverUrl = user.avatarUrl,
             kind = CollectionKind.Liked,
-            open = { soundCloudTracks("soundcloud:likes:${user.id}", "${user.username} — likes", user.avatarUrl) {
+            open = { soundCloudTracks("soundcloud:likes:${user.id}", "${user.username} — ${labels.likes}", user.avatarUrl) {
                 integrations.soundCloud.userLikes(user.id)
             } },
         )
         val uploads = CollectionSummary(
             key = "soundcloud:tracks:${user.id}",
-            title = "Tracks",
+            title = labels.tracks,
             subtitle = user.username,
             coverUrl = user.avatarUrl,
             open = { soundCloudTracks("soundcloud:tracks:${user.id}", user.username, user.avatarUrl) {
@@ -123,15 +126,15 @@ class ServiceCatalogs(
     suspend fun vkLibrary(): List<CollectionSummary> {
         val mine = CollectionSummary(
             key = "vk:my",
-            title = "My music",
+            title = labels.myMusic,
             kind = CollectionKind.Liked,
-            open = { vkTracks("vk:my", "My music", null) { integrations.vk.mySongs() } },
+            open = { vkTracks("vk:my", labels.myMusic, null) { integrations.vk.mySongs() } },
         )
         val popular = CollectionSummary(
             key = "vk:popular",
-            title = "Popular",
+            title = labels.popular,
             kind = CollectionKind.Chart,
-            open = { vkTracks("vk:popular", "Popular", null) { integrations.vk.popular() } },
+            open = { vkTracks("vk:popular", labels.popular, null) { integrations.vk.popular() } },
         )
         val playlists = runCatching { integrations.vk.myPlaylists() }.getOrDefault(emptyList()).map { it.summary() }
         return listOf(mine, popular) + playlists

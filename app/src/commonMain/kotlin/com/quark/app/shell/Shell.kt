@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.quark.app.Platform
 import com.quark.app.QuarkApp
+import com.quark.app.browse.CatalogLabels
 import com.quark.app.browse.CollectionKind
 import com.quark.app.browse.CollectionSummary
 import com.quark.app.browse.EditablePlaylist
@@ -49,7 +50,23 @@ class Shell(
     private val scope: CoroutineScope,
 ) {
     /** Set by the root on every language change; messages are built from it. */
-    var strings: Strings by mutableStateOf(Strings())
+    var strings: Strings = Strings()
+        set(value) {
+            if (field === value) return
+            field = value
+            val labels = CatalogLabels(
+                liked = value.liked,
+                chart = value.chart,
+                likes = value.liked,
+                tracks = value.tracksTitle,
+                myMusic = value.myMusic,
+                popular = value.popular,
+            )
+            app.yandexCatalog.labels = labels
+            app.catalogs.labels = labels
+            // Titles already fetched were named in the old language.
+            cache.forgetAll("")
+        }
 
     /** What the screens fetched, kept for going back to them. */
     val cache = LoadCache()
@@ -333,6 +350,31 @@ class Shell(
 
     fun export(collection: TrackCollection) {
         app.exporter.export(collection.title, collection.tracks)
+    }
+
+    /**
+     * Keeps every track of [collection] in the cache, so it plays without a
+     * connection ("Caching playlist…" in the Dart build).
+     */
+    fun downloadForOffline(collection: TrackCollection) = attempt {
+        messages.show(strings.caching)
+        val saved = app.downloader.cache(collection.tracks) { track -> app.resolver.downloadSource(track) }
+        messages.show(strings.cached(saved.size))
+    }
+
+    /** Uploads files the user picks into their Yandex playlist [kind] (`uploadTracks`). */
+    fun uploadToYandex(kind: Long, then: () -> Unit = {}) = attempt {
+        val files = platform.pickAudioFiles()
+        if (files.isEmpty()) return@attempt
+        messages.show(strings.uploading)
+        var uploaded = 0
+        for (file in files) {
+            val bytes = platform.readBytes(file) ?: continue
+            val name = app.library.displayName(file)
+            runCatching { app.yandexCatalog.uploadTrack(kind, name, bytes) }.onSuccess { uploaded++ }
+        }
+        messages.show(strings.uploaded(uploaded, files.size), error = uploaded < files.size)
+        then()
     }
 
     fun copy(text: String) {
