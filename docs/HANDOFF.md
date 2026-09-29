@@ -139,7 +139,9 @@ lock screen на Android (MediaSession), Discord Rich Presence, локально
 * **GET с телом.** Бэкенд YouTube принимает JSON в теле GET-запроса; OkHttp такое не отправляет,
   поэтому `YtMusicClient` ходит через движок CIO.
 * **SMTC — это WinRT через JNA.** Индексы методов и IID в `Smtc.kt` сверены с ABI; IID
-  делегата кнопок вычисляется по правилам WinRT, и тест это проверяет. Всё выполняется на
+  делегата кнопок вычисляется по правилам WinRT, и тест это проверяет. `SmtcTest` в CI
+  гоняет весь путь против настоящего окна на Windows-раннере. Порядок важен: `MusicProperties`
+  отдаются только после `put_Type(Music)`, иначе `ERROR_NOT_SUPPORTED`. Всё выполняется на
   одном потоке в MTA и в защищённом режиме JNA: при сбое интеграция отключается, плеер живёт.
 * **`mpv_observe_property` отдаёт текущее значение сразу после подписки**, а `SharedFlow` без
   replay теряет события до подписки — поэтому в `PlayerController` есть `listening` и
