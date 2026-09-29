@@ -35,6 +35,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Image
+import org.jetbrains.skia.Rect
+import org.jetbrains.skia.SamplingMode
+import org.jetbrains.skia.Surface
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -141,10 +145,32 @@ class AppRenderTest {
                 out.parentFile.mkdirs()
                 out.writeBytes(image.encodeToData(EncodedImageFormat.PNG)!!.bytes)
                 assertTrue(out.length() > 0, "$name was not drawn")
+                // A small copy, which CI prints so the screens can be looked at
+                // from the build log alone.
+                val small = File("build/preview/small/$name.jpg")
+                small.parentFile.mkdirs()
+                small.writeBytes(shrink(image, 0.5f))
             }
         } finally {
             scene.close()
         }
+    }
+
+    private fun shrink(image: Image, scale: Float): ByteArray {
+        val width = (image.width * scale).toInt().coerceAtLeast(1)
+        val height = (image.height * scale).toInt().coerceAtLeast(1)
+        val surface = Surface.makeRasterN32Premul(width, height)
+        surface.canvas.drawImageRect(
+            image,
+            Rect.makeWH(image.width.toFloat(), image.height.toFloat()),
+            Rect.makeWH(width.toFloat(), height.toFloat()),
+            SamplingMode.LINEAR,
+            null,
+            true,
+        )
+        val bytes = surface.makeImageSnapshot().encodeToData(EncodedImageFormat.JPEG, 70)!!.bytes
+        surface.close()
+        return bytes
     }
 
     private fun testApp(settings: SettingsStore): QuarkApp {

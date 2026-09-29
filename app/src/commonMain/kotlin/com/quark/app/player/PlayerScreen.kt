@@ -28,7 +28,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ClearAll
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -59,6 +62,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -67,6 +71,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -605,7 +611,11 @@ private fun PlaylistPanel(
         modifier = modifier,
     ) {
         var query by remember { mutableStateOf("") }
-        val shown = remember(state.playlist, query) { state.playlist.matching(query) }
+        var category by remember(state.playlistInfo) { mutableStateOf<Category?>(null) }
+        val shown = remember(state.playlist, query, category) {
+            state.playlist.matching(query).filter { track -> category?.matches(track) ?: true }
+        }
+        val showCategories by shell.app.settings.settings.collectAsState()
 
         Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp)) {
             PanelHeader(state, status, onClose)
@@ -617,10 +627,21 @@ private fun PlaylistPanel(
                 leading = Icons.Filled.Search,
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (showCategories.library.categories) {
+                Spacer(Modifier.height(8.dp))
+                Categories(state.playlist, category) { category = it }
+            }
             Spacer(Modifier.height(8.dp))
             Divider()
             Spacer(Modifier.height(6.dp))
-            TrackList(state, shown, model, showQueue = query.isEmpty(), modifier = Modifier.weight(1f))
+            TrackList(
+                state = state,
+                shown = shown,
+                model = model,
+                showQueue = query.isEmpty() && category == null,
+                reorderable = query.isEmpty() && category == null,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -660,12 +681,74 @@ private fun PanelHeader(
     }
 }
 
+/** A filter of the playlist panel: one album or one artist (`getCategories`). */
+private sealed interface Category {
+    val label: String
+    fun matches(track: Track): Boolean
+
+    data class Album(override val label: String) : Category {
+        override fun matches(track: Track) = label in track.albums
+    }
+
+    data class Artist(override val label: String) : Category {
+        override fun matches(track: Track) = label in track.artists
+    }
+}
+
+/** "All", then every album and every artist of the playlist, as chips. */
+@Composable
+private fun Categories(playlist: List<Track>, chosen: Category?, onChoose: (Category?) -> Unit) {
+    val categories = remember(playlist) {
+        val albums = playlist.flatMap { it.albums }.filter { it.isNotBlank() && it != Track.UNKNOWN_ALBUM }.distinct()
+        val artists = playlist.flatMap { it.artists }.filter { it.isNotBlank() && it != Track.UNKNOWN_ARTIST }.distinct()
+        // A playlist of one album by one artist has nothing to sort by.
+        if (albums.size + artists.size <= 2) emptyList()
+        else albums.map { Category.Album(it) } + artists.map { Category.Artist(it) }
+    }
+    if (categories.isEmpty()) return
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        item(key = "all") { CategoryChip(strings.allTracks, chosen == null) { onChoose(null) } }
+        items(categories, key = { it.toString() }) { category ->
+            CategoryChip(category.label, category == chosen) { onChoose(if (category == chosen) null else category) }
+        }
+    }
+}
+
+@Composable
+private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = Quark.colors
+    QText(
+        label,
+        Quark.type.label,
+        color = if (selected) colors.text else colors.textSecondary,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) Quark.accent.primary.copy(alpha = 0.45f) else colors.control)
+            .clickable(indication = null, interactionSource = null, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
+}
+
+/**
+ * Dragging a track by its handle to a new place in the playlist, as the
+ * Flutter build's `ReorderableListView` did. The rows move under the finger
+ * as it goes; the playlist itself changes once, when it is let go.
+ */
+private class Reorder {
+    var order by mutableStateOf<List<Track>?>(null)
+    var draggedKey by mutableStateOf<String?>(null)
+    var offset by mutableFloatStateOf(0f)
+    var from = -1
+}
+
 @Composable
 private fun TrackList(
     state: PlayerState,
     shown: List<Track>,
     model: PlayerUi,
     showQueue: Boolean,
+    reorderable: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val shell = shell
@@ -674,10 +757,45 @@ private fun TrackList(
     val queue = if (showQueue) state.queue else emptyList()
     val offset = if (queue.isEmpty()) 0 else queue.size + 1
     val currentIndex = remember(shown, state.current) { shown.indexOf(state.current) }
+    val reorder = remember { Reorder() }
+    val rows = reorder.order ?: shown
+    val keys = remember(rows) { stableKeys(rows) }
 
     // Follow the music: when it moves on by itself, bring it into view.
     LaunchedEffect(currentIndex) {
-        if (currentIndex >= 0) listState.animateScrollToItem(currentIndex + offset)
+        if (currentIndex >= 0 && reorder.order == null) listState.animateScrollToItem(currentIndex + offset)
+    }
+
+    fun dragBy(delta: Float) {
+        val order = reorder.order ?: return
+        val key = reorder.draggedKey ?: return
+        reorder.offset += delta
+        val visible = listState.layoutInfo.visibleItemsInfo
+        val dragged = visible.firstOrNull { it.key == key } ?: return
+        val middle = dragged.offset + reorder.offset + dragged.size / 2f
+        val target = visible.firstOrNull { item ->
+            item.key != key && item.key is String && (item.key as String) in keys &&
+                middle >= item.offset && middle <= item.offset + item.size
+        } ?: return
+        val fromIndex = keys.indexOf(key)
+        val toIndex = keys.indexOf(target.key as String)
+        if (fromIndex < 0 || toIndex < 0) return
+        reorder.order = order.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        // The row now sits where the target was; keep it under the pointer.
+        reorder.offset -= (target.offset - dragged.offset)
+    }
+
+    fun endDrag() {
+        val order = reorder.order
+        val key = reorder.draggedKey
+        if (order != null && key != null) {
+            val to = stableKeys(order).indexOf(key)
+            if (reorder.from >= 0 && to >= 0 && to != reorder.from) shell.app.controller.moveInPlaylist(reorder.from, to)
+        }
+        reorder.order = null
+        reorder.draggedKey = null
+        reorder.offset = 0f
+        reorder.from = -1
     }
 
     LazyColumn(modifier, state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -696,16 +814,46 @@ private fun TrackList(
                 )
             }
         }
-        itemsIndexed(shown, key = { index, track -> "${track.filepath}#$index" }) { _, track ->
+        itemsIndexed(rows, key = { index, _ -> keys[index] }) { index, track ->
+            val key = keys[index]
+            val dragging = reorder.draggedKey == key
             TrackRow(
                 track = track,
                 onClick = { model.play(track) },
                 playing = track == state.current,
+                modifier = Modifier
+                    .zIndex(if (dragging) 1f else 0f)
+                    .graphicsLayer { translationY = if (dragging) reorder.offset else 0f },
                 menu = {
                     TrackMenuItems(
                         track,
                         onRemove = { shell.app.controller.removeFromPlaylist(track) }.takeIf { state.playlist.size > 1 },
                     )
+                },
+                leading = if (!reorderable) null else {
+                    {
+                        QIcon(
+                            Icons.Filled.DragIndicator,
+                            Modifier
+                                .size(20.dp)
+                                .pointerInput(key) {
+                                    detectDragGestures(
+                                        onDragStart = {
+                                            reorder.order = shown
+                                            reorder.draggedKey = key
+                                            reorder.from = keys.indexOf(key)
+                                            reorder.offset = 0f
+                                        },
+                                        onDragEnd = { endDrag() },
+                                        onDragCancel = { endDrag() },
+                                    ) { change, amount ->
+                                        change.consume()
+                                        dragBy(amount.y)
+                                    }
+                                },
+                            Quark.colors.textMuted,
+                        )
+                    }
                 },
             )
         }
@@ -782,5 +930,17 @@ internal fun Duration.display(): String {
         "$hours:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
     } else {
         "$minutes:${seconds.toString().padStart(2, '0')}"
+    }
+}
+
+/**
+ * Keys for rows of a playlist that stay with the track when it moves: its path,
+ * and a count for the second and later copies of the same track.
+ */
+private fun stableKeys(tracks: List<Track>): List<String> {
+    val seen = HashMap<String, Int>()
+    return tracks.map { track ->
+        val copy = seen.merge(track.filepath, 1, Int::plus) ?: 1
+        if (copy == 1) track.filepath else "${track.filepath}#$copy"
     }
 }

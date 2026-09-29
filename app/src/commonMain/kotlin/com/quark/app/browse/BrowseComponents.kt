@@ -229,6 +229,7 @@ fun TrackRow(
     playing: Boolean = false,
     index: Int? = null,
     menu: (@Composable MenuScope.() -> Unit)? = { TrackMenuItems(track) },
+    leading: (@Composable () -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -255,6 +256,7 @@ fun TrackRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        leading?.invoke()
         if (index != null) {
             QText(
                 (index + 1).toString(),

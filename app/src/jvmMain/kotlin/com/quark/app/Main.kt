@@ -1,6 +1,9 @@
 package com.quark.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toComposeImageBitmap
@@ -31,7 +34,9 @@ fun main() = application {
             return@Window
         }
         val platform = remember { DesktopPlatform { window } }
-        QuarkRoot(app, platform)
+        Box(Modifier.fillMaxSize().fileDrop(app)) {
+            QuarkRoot(app, platform)
+        }
     }
 }
 
