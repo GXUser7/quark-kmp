@@ -20,6 +20,7 @@ data class StoredPlaylist(
     val coverUrl: String?,
     val description: String?,
     val isAlbum: Boolean,
+    val trackCount: Long = 0,
 )
 
 class PlaylistRepository(
@@ -44,11 +45,66 @@ class PlaylistRepository(
         queries.tracksOf(id).executeAsList().map { it.toTrack() }
     }
 
+    /** The user's own playlists, newest first, with how many tracks each holds. */
+    fun observeUser(): Flow<List<StoredPlaylist>> =
+        queries.selectUser().asFlow().mapToList(io).map { rows -> rows.map { it.toStored() } }
+
+    suspend fun userPlaylists(): List<StoredPlaylist> = withContext(io) {
+        queries.selectUser().executeAsList().map { it.toStored() }
+    }
+
+    suspend fun userPlaylistByTitle(title: String): StoredPlaylist? = withContext(io) {
+        queries.selectUserByTitle(title).executeAsOneOrNull()?.toStored()
+    }
+
+    /** A new, empty playlist of the user's; returns its id. */
     suspend fun create(title: String): Long = withContext(io) {
         queries.transactionWithResult {
-            queries.create(title)
+            queries.createTyped(title, TYPE_PLAYLIST)
             trackQueries.lastInsertedId().executeAsOne()
         }
+    }
+
+    /** A new playlist of the user's already holding [tracks]. */
+    suspend fun createWith(title: String, tracks: List<Track>, coverUrl: String? = null): Long = withContext(io) {
+        queries.transactionWithResult {
+            queries.createTyped(title, TYPE_PLAYLIST)
+            val id = trackQueries.lastInsertedId().executeAsOne()
+            coverUrl?.let { queries.setCoverUrl(it, id) }
+            appendTracks(id, tracks)
+            id
+        }
+    }
+
+    suspend fun setDescription(id: Long, description: String?) = withContext(io) {
+        queries.setDescription(description, id)
+    }
+
+    suspend fun setCoverUrl(id: Long, url: String?) = withContext(io) {
+        queries.setCoverUrl(url, id)
+    }
+
+    /** Takes one track out of a playlist, wherever it sits. */
+    suspend fun removeTrack(playlistId: Long, trackPath: String) = withContext(io) {
+        queries.transaction {
+            val trackId = trackQueries.selectByPath(trackPath).executeAsOneOrNull()?.id ?: return@transaction
+            queries.removeTrack(playlistId, trackId)
+        }
+    }
+
+    /** Rewrites the order of a playlist to follow [paths]. */
+    suspend fun reorder(playlistId: Long, paths: List<String>) = withContext(io) {
+        queries.transaction {
+            paths.forEachIndexed { index, path ->
+                val trackId = trackQueries.selectByPath(path).executeAsOneOrNull()?.id ?: return@forEachIndexed
+                queries.setPosition(index.toLong() + 1, playlistId, trackId)
+            }
+        }
+    }
+
+    /** Where the first track's artwork is, to stand in as the playlist's cover. */
+    suspend fun firstTrackCover(playlistId: Long): Track? = withContext(io) {
+        queries.tracksOf(playlistId).executeAsList().firstOrNull()?.toTrack()
     }
 
     suspend fun rename(id: Long, title: String) = withContext(io) {
@@ -86,7 +142,7 @@ class PlaylistRepository(
             val playlistId = existingId
                 ?.takeIf { queries.selectById(it).executeAsOneOrNull() != null }
                 ?: run {
-                    queries.create(playlist.name)
+                    queries.createTyped(playlist.name, TYPE_SESSION)
                     trackQueries.lastInsertedId().executeAsOne()
                 }
 
@@ -125,6 +181,19 @@ class PlaylistRepository(
         }
     }
 }
+
+const val TYPE_PLAYLIST = "Playlist"
+const val TYPE_SESSION = "Session"
+
+private fun com.quark.data.db.SelectUser.toStored() = StoredPlaylist(
+    id = id,
+    title = title,
+    coverPath = cover_path,
+    coverUrl = cover_url,
+    description = description,
+    isAlbum = type.equals("Album", ignoreCase = true),
+    trackCount = track_count,
+)
 
 private fun Playlists.toStored() = StoredPlaylist(
     id = id,

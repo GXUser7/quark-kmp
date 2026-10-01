@@ -68,6 +68,9 @@ class PlayerController(
                     is EngineEvent.TotalDuration -> _state.update { it.copy(duration = event.duration) }
                     is EngineEvent.PlayingChanged -> _state.update { it.copy(isPlaying = event.isPlaying) }
                     EngineEvent.Completed -> onEngineAdvanced()
+                    // Nothing was waiting in the engine, so the next track has
+                    // to be opened rather than merely caught up with.
+                    EngineEvent.Ended -> skipForward(ChangeReason.Completed)
                     // A track that will not open is not worth stalling on.
                     is EngineEvent.Failed -> skipForward(ChangeReason.Completed)
                 }
@@ -217,6 +220,61 @@ class PlayerController(
     fun enqueueLast(track: Track) {
         queue.enqueueLast(track)
         publishQueue()
+    }
+
+    fun enqueueNext(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        queue.enqueueNext(tracks)
+        publishQueue()
+    }
+
+    fun enqueueLast(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        queue.enqueueLast(tracks)
+        publishQueue()
+    }
+
+    fun moveInQueue(from: Int, to: Int) {
+        queue.moveInQueue(from, to)
+        publishQueue()
+    }
+
+    /** Reorders the playlist itself; the current track keeps playing. */
+    fun moveInPlaylist(from: Int, to: Int) {
+        val list = queue.playlist
+        if (from !in list.indices || to !in list.indices || from == to) return
+        val reordered = list.toMutableList().apply { add(to, removeAt(from)) }
+        queue.setPlaylist(reordered)
+        if (!_state.value.isShuffled) unshuffled = reordered
+        _state.update { it.copy(playlist = reordered) }
+        repreload()
+    }
+
+    /** Takes [track] out of the playlist; if it is playing, it plays on to its end. */
+    fun removeFromPlaylist(track: Track) {
+        val reordered = queue.playlist.filterNot { it == track }
+        queue.setPlaylist(reordered)
+        unshuffled = unshuffled.filterNot { it == track }
+        _state.update { it.copy(playlist = reordered) }
+        repreload()
+    }
+
+    /** Adds [tracks] to the playlist, after the current track or at the end. */
+    fun addToPlaylist(tracks: List<Track>, afterCurrent: Boolean = false) {
+        if (tracks.isEmpty()) return
+        val list = queue.playlist
+        val at = if (afterCurrent) (list.indexOf(_state.value.current) + 1).coerceIn(0, list.size) else list.size
+        val extended = list.toMutableList().apply { addAll(at, tracks) }
+        queue.setPlaylist(extended)
+        unshuffled = if (_state.value.isShuffled) unshuffled + tracks else extended
+        _state.update { it.copy(playlist = extended) }
+        repreload()
+    }
+
+    suspend fun stop() {
+        engine.stop()
+        queue.clearQueue()
+        _state.update { PlayerState(volume = it.volume, speed = it.speed) }
     }
 
     fun removeFromQueue(track: Track) {

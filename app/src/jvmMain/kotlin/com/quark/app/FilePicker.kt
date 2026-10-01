@@ -25,11 +25,23 @@ object FilePicker {
         return dialog.files?.toList().orEmpty()
     }
 
-    fun pickFolder(owner: Frame?): File? {
+    fun pickFile(owner: Frame?, title: String, extensions: List<String>): File? {
+        val allowed = extensions.map(String::lowercase).toSet()
+        val dialog = FileDialog(owner, title, FileDialog.LOAD).apply {
+            isMultipleMode = false
+            if (allowed.isNotEmpty()) {
+                setFilenameFilter { _, name -> name.substringAfterLast('.', "").lowercase() in allowed }
+            }
+        }
+        dialog.isVisible = true
+        return dialog.files?.firstOrNull()
+    }
+
+    fun pickFolder(owner: Frame?, title: String = "Add folder"): File? {
         useSystemLookAndFeel()
         val chooser = JFileChooser().apply {
             fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-            dialogTitle = "Add folder"
+            dialogTitle = title
         }
         return if (chooser.showOpenDialog(owner) == JFileChooser.APPROVE_OPTION) {
             chooser.selectedFile

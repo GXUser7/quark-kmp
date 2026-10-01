@@ -3,47 +3,116 @@ import java.net.URI
 import java.security.MessageDigest
 
 plugins {
-    kotlin("multiplatform")
-    id("org.jetbrains.kotlin.plugin.compose")
-    id("org.jetbrains.compose")
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.compose.multiplatform)
+    alias(libs.plugins.android.kmp.library)
 }
 
+/**
+ * The shared interface and everything above the engine.
+ *
+ * `commonMain` holds the screens, the view models and the wiring; `jvmMain` is
+ * the desktop application (window, file dialogs, libmpv, system integrations)
+ * and `androidMain` the Android specifics the `:androidApp` module builds on.
+ */
 kotlin {
     jvmToolchain(21)
     jvm()
-    compilerOptions.freeCompilerArgs.addAll(
-        "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-    )
+    androidLibrary {
+        namespace = "com.quark.app"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+    }
+
+    compilerOptions {
+        freeCompilerArgs.addAll("-Xexpect-actual-classes")
+        optIn.addAll(
+            "kotlin.time.ExperimentalTime",
+            "kotlinx.coroutines.ExperimentalCoroutinesApi",
+            "kotlinx.coroutines.FlowPreview",
+        )
+    }
+
     sourceSets {
-        jvmMain.dependencies {
-            implementation(project(":core"))
-            implementation(project(":player"))
-            implementation(project(":data"))
-            implementation(project(":network"))
-            implementation(project(":platform"))
-            implementation(compose.desktop.currentOs)
-            implementation(compose.material3)
+        commonMain.dependencies {
+            api(project(":services"))
+            implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation(compose.ui)
             implementation(compose.materialIconsExtended)
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
-            implementation("io.ktor:ktor-client-core:3.4.0")
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.ktor.client.core)
+        }
+        jvmMain.dependencies {
+            implementation(compose.desktop.currentOs)
+            implementation(libs.kotlinx.coroutines.swing)
+            implementation(libs.jaudiotagger)
+            implementation(libs.jna)
+            implementation(libs.jna.platform)
+        }
+        androidMain.dependencies {
+            implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.androidx.annotation)
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.core.ktx)
+            implementation(libs.androidx.documentfile)
+            implementation(libs.media3.exoplayer)
+            implementation(libs.media3.session)
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
 
+
 compose.desktop {
     application {
         mainClass = "com.quark.app.MainKt"
+        jvmArgs += listOf("-Dfile.encoding=UTF-8", "-Xss4m")
+
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "quark"
-            packageVersion = "0.1.0"
+            packageVersion = project.version.toString()
+            description = "quark — where sound begins"
+            vendor = "PDG"
+            copyright = "MIT licence, (c) z3nsh0w, aror and contributors"
+            licenseFile.set(rootProject.file("LICENSE"))
+            // The whole runtime rather than a hand-picked module list: sqlite-jdbc
+            // needs java.sql, TLS needs jdk.crypto.ec, JNA needs jdk.unsupported,
+            // and a module missed here only shows up as a crash on a user's
+            // machine. The installer is dominated by libmpv anyway.
+            includeAllModules = true
             // Everything under resources/<platform> is copied next to the
             // application and exposed as compose.application.resources.dir.
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
+
+            windows {
+                iconFile.set(project.file("icons/quark.ico"))
+                menu = true
+                menuGroup = "quark"
+                shortcut = true
+                dirChooser = true
+                perUserInstall = true
+                // Fixed so a newer installer upgrades an older installation in
+                // place instead of installing next to it.
+                upgradeUuid = "6f1c2c1e-6c4f-4f0e-9c1a-3b8e0d2f7a51"
+            }
+            linux {
+                iconFile.set(project.file("icons/quark.png"))
+                packageName = "quark"
+                debMaintainer = "quark@quarkaudio.ru"
+                menuGroup = "AudioVideo"
+            }
+            macOS {
+                iconFile.set(project.file("icons/quark.png"))
+                bundleID = "com.quark.quark"
+            }
         }
     }
 }
@@ -120,6 +189,9 @@ fun File.sha256(): String = MessageDigest.getInstance("SHA-256")
     .digest(readBytes())
     .joinToString("") { "%02x".format(it) }
 
-tasks.matching { it.name == "run" || it.name.startsWith("package") }.configureEach {
+// Only the desktop tasks: the Android library plugin brings its own `package*`
+// tasks, which have nothing to do with libmpv.
+val desktopTasksNeedingMpv = setOf("run", "prepareAppResources", "createDistributable", "createReleaseDistributable")
+tasks.matching { it.name in desktopTasksNeedingMpv }.configureEach {
     dependsOn(fetchMpv)
 }

@@ -38,7 +38,7 @@ class TrackCacherTest {
             val cached = cacher.cache(listOf(track)) { DownloadSource("https://cdn.test/dogs") }
 
             assertEquals(3, requests)
-            assertEquals(listOf(Path.of(track.filepath)), cached)
+            assertEquals(listOf(track.filepath), cached)
             assertContentEquals(expected, Path.of(track.filepath).readBytes())
             assertEquals(0, Files.list(directory).use { files ->
                 files.filter { it.fileName.toString().contains(".part-") }.count()

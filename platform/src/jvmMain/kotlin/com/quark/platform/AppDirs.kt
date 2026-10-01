@@ -76,6 +76,16 @@ object AppDirs {
         }?.takeIf { Files.isDirectory(it) }
     }
 
+    /** The same locations, as the strings shared code takes. */
+    val paths: StoragePaths by lazy {
+        StoragePaths(
+            support = support.toString(),
+            cache = cache.toString(),
+            separator = java.io.File.separator,
+            exports = home.resolve("Music").resolve(APP).toString(),
+        )
+    }
+
     private const val APP = "quark"
 
     private fun Path.created(): Path = also { Files.createDirectories(it) }

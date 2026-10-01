@@ -2,6 +2,7 @@ package com.quark.data.repository
 
 import com.quark.core.model.CoverType
 import com.quark.core.model.LocalTrack
+import com.quark.core.model.ServiceTrack
 import com.quark.core.model.Track
 import com.quark.core.model.TrackSource
 import com.quark.core.model.YandexTrack
@@ -48,8 +49,18 @@ fun Known_tracks.toTrack(): Track {
             videoId = sourceid.orEmpty(),
         )
 
-        // Spotify tracks are never written by the player; treat anything else as local.
-        else -> LocalTrack(
+        TrackSource.Spotify, TrackSource.SoundCloud, TrackSource.Vk -> ServiceTrack(
+            title = title,
+            artists = artistList,
+            albums = albumList,
+            filepath = path,
+            coverType = if (cover_path != null) CoverType.ExternalFile else CoverType.Url,
+            cover = cover_path ?: cover_url.orEmpty(),
+            source = TrackSource.parse(source),
+            id = sourceid.orEmpty(),
+        )
+
+        TrackSource.Local -> LocalTrack(
             title = title,
             artists = artistList,
             albums = albumList,
@@ -74,7 +85,8 @@ internal val Track.sourceId: String?
     get() = when (this) {
         is YandexTrack -> trackId
         is YtMusicTrack -> videoId
-        else -> null
+        is ServiceTrack -> id
+        is LocalTrack -> null
     }
 
 internal val Track.coverUrl: String?

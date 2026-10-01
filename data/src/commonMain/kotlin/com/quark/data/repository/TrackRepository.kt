@@ -33,6 +33,12 @@ class TrackRepository(
         queries.selectByPath(path).executeAsOneOrNull()?.toTrack()
     }
 
+    /** Tracks whose title, artists or album contain [query], for the local side of search. */
+    suspend fun search(query: String, limit: Long = 100): List<Track> = withContext(io) {
+        if (query.isBlank()) return@withContext emptyList()
+        queries.search(query.trim(), limit).executeAsList().map { it.toTrack() }
+    }
+
     suspend fun idOf(path: String): Long? = withContext(io) {
         queries.selectByPath(path).executeAsOneOrNull()?.id
     }

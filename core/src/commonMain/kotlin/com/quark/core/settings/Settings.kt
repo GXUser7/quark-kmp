@@ -17,6 +17,8 @@ enum class AudioBackend {
 /** Preferred stream quality for Yandex Music, in the api's own vocabulary. */
 @Serializable
 enum class StreamQuality(val apiValue: String) {
+    /** 64 kbps AAC, for metered connections. */
+    Low("lq"),
     Normal("nq"),
     High("hq"),
     Lossless("lossless");
@@ -42,8 +44,17 @@ data class Settings(
     val appearance: AppearanceSettings = AppearanceSettings(),
     val integrations: IntegrationSettings = IntegrationSettings(),
     val yandex: YandexSettings = YandexSettings(),
+    val spotify: SpotifySettings = SpotifySettings(),
+    val soundCloud: SoundCloudSettings = SoundCloudSettings(),
+    val vk: VkSettings = VkSettings(),
+    val youtube: YouTubeSettings = YouTubeSettings(),
+    val account: AccountSettings = AccountSettings(),
     val memory: PlaybackMemory = PlaybackMemory(),
 )
+
+/** Light or dark interface; [System] follows the operating system. */
+@Serializable
+enum class ThemeMode { System, Dark, Light }
 
 @Serializable
 data class PlaybackSettings(
@@ -55,6 +66,9 @@ data class PlaybackSettings(
 
     /** Keep played remote tracks on disk so replays are instant. */
     val cacheRemoteTracks: Boolean = false,
+
+    /** Playback speed, remembered across tracks and restarts. */
+    val speed: Float = 1f,
 )
 
 @Serializable
@@ -98,14 +112,76 @@ data class AppearanceSettings(
 
     /** Hovering the edge of the window opens the playlist panel. */
     val playlistOpeningArea: Boolean = false,
+
+    /** Interface language code, or null to follow the system. */
+    val language: String? = null,
+
+    val theme: ThemeMode = ThemeMode.Dark,
 )
 
 @Serializable
 data class IntegrationSettings(
     val discordRpc: Boolean = false,
 
-    /** The local HTTP/WebSocket control api, and its mDNS announcement. */
+    /** The local HTTP/WebSocket control api. */
     val localApi: Boolean = false,
+
+    /**
+     * Let the local api answer the whole network and announce it over mDNS,
+     * rather than only this machine. Off by default: the api has no password.
+     */
+    val localApiLan: Boolean = false,
+
+    /** The system media controls: SMTC on Windows, media keys, the Android notification. */
+    val nativeControls: Boolean = true,
+)
+
+/** The quark account at quarkaudio.ru, which syncs playlists and fronts VK. */
+@Serializable
+data class AccountSettings(
+    val accessToken: String = "",
+    val refreshToken: String = "",
+    val username: String = "",
+    val email: String = "",
+    /** Upload and download playlists on sign-in and at startup. */
+    val syncPlaylists: Boolean = true,
+) {
+    val isSignedIn: Boolean get() = accessToken.isNotEmpty()
+}
+
+@Serializable
+data class SpotifySettings(
+    val accessToken: String = "",
+    val refreshToken: String = "",
+    /** `hires`, `lossless` or `high`, as the Dart build stored it. */
+    val quality: String = "high",
+    val searchEnabled: Boolean = true,
+) {
+    val isSignedIn: Boolean get() = refreshToken.isNotEmpty()
+}
+
+@Serializable
+data class SoundCloudSettings(
+    /** The user's OAuth token, for full-length Go+ tracks. Optional. */
+    val oauthToken: String = "",
+    /** The profile last opened, so the playlists are one click away. */
+    val profileUrl: String = "",
+    val searchEnabled: Boolean = true,
+)
+
+@Serializable
+data class VkSettings(
+    val userId: String = "",
+    val searchEnabled: Boolean = true,
+) {
+    val isConnected: Boolean get() = userId.isNotEmpty()
+}
+
+@Serializable
+data class YouTubeSettings(
+    /** The Netscape cookie file exported from a signed-in browser, verbatim. */
+    val cookies: String = "",
+    val searchEnabled: Boolean = true,
 )
 
 @Serializable

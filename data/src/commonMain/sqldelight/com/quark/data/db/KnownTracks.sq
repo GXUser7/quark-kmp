@@ -44,3 +44,12 @@ UPDATE known_tracks SET cover_path = ?, blur_cover_path = ?, md5 = ? WHERE id = 
 
 deleteByPath:
 DELETE FROM known_tracks WHERE path = ?;
+
+search:
+SELECT * FROM known_tracks
+WHERE title LIKE ('%' || :query || '%') OR artists LIKE ('%' || :query || '%') OR album LIKE ('%' || :query || '%')
+ORDER BY title COLLATE NOCASE
+LIMIT :limit;
+
+selectBySource:
+SELECT * FROM known_tracks WHERE source = ? ORDER BY id DESC LIMIT ?;

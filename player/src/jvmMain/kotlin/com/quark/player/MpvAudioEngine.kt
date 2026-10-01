@@ -75,7 +75,7 @@ class MpvAudioEngine internal constructor(
                 // the end here instead.
                 MpvEndReason.EOF -> if (isLastEntry()) {
                     emitPlaying(false)
-                    emit(EngineEvent.Completed)
+                    emit(EngineEvent.Ended)
                 }
                 else -> Unit
             }

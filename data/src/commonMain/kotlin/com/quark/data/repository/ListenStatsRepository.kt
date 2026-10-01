@@ -22,6 +22,22 @@ data class Listen(
 
 data class TrackPlays(val track: Track, val plays: Long, val seconds: Long)
 
+/** One row of the listening history, joined with its track. */
+data class ListenRecord(
+    val trackKey: String,
+    val title: String,
+    val artists: List<String>,
+    val album: String,
+    val source: String,
+    /** Unix seconds. */
+    val at: Long,
+    val playedSeconds: Long,
+    val totalSeconds: Long,
+    val progressPercent: Int,
+    val skipped: Boolean,
+    val track: Track,
+)
+
 class ListenStatsRepository(
     private val db: QuarkDatabase,
     private val io: CoroutineDispatcher,
@@ -85,4 +101,38 @@ class ListenStatsRepository(
     suspend fun totalSeconds(since: Long): Long = withContext(io) {
         queries.totalSecondsSince(since).executeAsOne()
     }
+
+    /** Every listen since [since], oldest first, with the track it was of. */
+    suspend fun listens(since: Long = 0): List<ListenRecord> = withContext(io) {
+        queries.listensWithTracks(since).executeAsList().map { row ->
+            ListenRecord(
+                trackKey = row.path,
+                title = row.title,
+                artists = row.artists.toArtistList(),
+                album = row.album,
+                source = row.source,
+                at = row.time,
+                playedSeconds = row.played_seconds,
+                totalSeconds = row.total_track_duration,
+                progressPercent = row.progress_percent.toInt(),
+                skipped = row.is_skipped,
+                track = com.quark.data.db.Known_tracks(
+                    id = row.track_id,
+                    path = row.path,
+                    title = row.title,
+                    artists = row.artists,
+                    album = row.album,
+                    cover_url = row.cover_url,
+                    cover_path = row.cover_path,
+                    blur_cover_path = null,
+                    md5 = null,
+                    source = row.source,
+                    sourceid = row.sourceid,
+                    downloaded = false,
+                ).toTrack(),
+            )
+        }
+    }
+
+    suspend fun clear() = withContext(io) { queries.deleteAll() }
 }

@@ -30,3 +30,14 @@ LIMIT ?;
 
 totalSecondsSince:
 SELECT COALESCE(SUM(played_seconds), 0) FROM listen_stats WHERE time >= ?;
+
+listensWithTracks:
+SELECT ls.time, ls.played_seconds, ls.total_track_duration, ls.progress_percent, ls.is_skipped,
+       kt.id AS track_id, kt.path, kt.title, kt.artists, kt.album, kt.source, kt.cover_url, kt.cover_path, kt.sourceid
+FROM listen_stats ls
+INNER JOIN known_tracks kt ON kt.id = ls.track
+WHERE ls.time >= ?
+ORDER BY ls.time ASC;
+
+deleteAll:
+DELETE FROM listen_stats;

@@ -14,7 +14,9 @@ enum class TrackSource(val value: String) {
     Local("local"),
     YandexMusic("yandex_music"),
     YouTubeMusic("youtube"),
-    Spotify("spotify");
+    Spotify("spotify"),
+    SoundCloud("soundcloud"),
+    Vk("vkmusic");
 
     companion object {
         fun parse(value: String?): TrackSource =
@@ -45,6 +47,9 @@ sealed interface Track {
     val coverType: CoverType
     val source: TrackSource
 
+    /** Zero when the source did not say; the engine reports the real length. */
+    val durationMs: Long
+
     val artistLine: String get() = artists.joinToString(", ")
     val albumLine: String get() = albums.firstOrNull() ?: UNKNOWN_ALBUM
 
@@ -71,7 +76,7 @@ data class LocalTrack(
     override val filepath: String,
     override val coverType: CoverType,
     override val cover: String = NO_COVER,
-    val durationMs: Long = 0,
+    override val durationMs: Long = 0,
 ) : Track {
     override val source: TrackSource get() = TrackSource.Local
 
@@ -91,7 +96,7 @@ data class YandexTrack(
     val trackId: String,
     val albumId: Long? = null,
     val artistIds: List<Long> = emptyList(),
-    val durationMs: Long = 0,
+    override val durationMs: Long = 0,
     val available: Boolean = true,
     /**
      * The untouched api payload. The Dart version keeps it to round-trip a
@@ -113,9 +118,32 @@ data class YtMusicTrack(
     override val coverType: CoverType,
     override val cover: String = "",
     val videoId: String,
-    val durationMs: Long = 0,
+    override val durationMs: Long = 0,
     /** Direct media url handed out by the backend; expires, so it is re-resolved. */
     val streamUrl: String? = null,
 ) : Track {
     override val source: TrackSource get() = TrackSource.YouTubeMusic
 }
+
+/**
+ * A track from one of the streaming services that need nothing beyond an id to
+ * find their audio again: Spotify, SoundCloud and VK.
+ *
+ * One class for all three rather than one each, because the only difference is
+ * which resolver answers for them, and that is keyed off [source].
+ */
+@Serializable
+data class ServiceTrack(
+    override val title: String,
+    override val artists: List<String>,
+    override val albums: List<String>,
+    override val filepath: String,
+    override val coverType: CoverType,
+    override val source: TrackSource,
+    /** The service's own id for the track. */
+    val id: String,
+    override val cover: String = "",
+    override val durationMs: Long = 0,
+    /** What the resolver needs besides the id: a permalink, an access key, an ISRC. */
+    val extras: Map<String, String> = emptyMap(),
+) : Track

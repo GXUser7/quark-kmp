@@ -41,9 +41,31 @@ interface AudioEngine {
     suspend fun release()
 }
 
+/**
+ * What the operating system's media controls show while a source plays: the
+ * Android notification and lock screen, SMTC on Windows. Engines that have no
+ * such surface ignore it.
+ */
+data class MediaInfo(
+    val title: String,
+    val artist: String,
+    val album: String,
+    /** An http(s) or content url the platform can load artwork from itself. */
+    val artworkUrl: String? = null,
+    val durationMs: Long = 0,
+)
+
 sealed interface MediaSource {
-    data class LocalFile(val path: String) : MediaSource
-    data class Network(val url: String, val headers: Map<String, String> = emptyMap()) : MediaSource
+    val info: MediaInfo?
+
+    /** A path on disk, or on Android a `content://` uri. */
+    data class LocalFile(val path: String, override val info: MediaInfo? = null) : MediaSource
+
+    data class Network(
+        val url: String,
+        val headers: Map<String, String> = emptyMap(),
+        override val info: MediaInfo? = null,
+    ) : MediaSource
 }
 
 sealed interface EngineEvent {
@@ -51,8 +73,15 @@ sealed interface EngineEvent {
     data class TotalDuration(val duration: Duration) : EngineEvent
     data class PlayingChanged(val isPlaying: Boolean) : EngineEvent
 
-    /** The current source ran to its end; the preloaded one, if any, took over. */
+    /** The current source ran to its end and the preloaded one took over. */
     data object Completed : EngineEvent
+
+    /**
+     * The current source ran to its end with nothing preloaded behind it —
+     * the queue had nothing, or the next track could not be resolved in time.
+     * Unlike [Completed], nothing is playing now.
+     */
+    data object Ended : EngineEvent
 
     data class Failed(val source: MediaSource, val cause: Throwable) : EngineEvent
 }

@@ -149,6 +149,12 @@ class PlaybackQueue {
         returnPoint = null
     }
 
+    /** Moves the queued entry at [from] to [to], for drag-to-reorder. */
+    fun moveInQueue(from: Int, to: Int) {
+        if (from !in queue.indices || to !in queue.indices || from == to) return
+        queue = queue.toMutableList().apply { add(to, removeAt(from)) }
+    }
+
     /**
      * Remembers where to come back to the first time the queue is used. The
      * current track does not join the queue: it is still playing from the

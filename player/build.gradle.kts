@@ -1,25 +1,41 @@
-plugins { kotlin("multiplatform") }
+plugins {
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.kmp.library)
+}
 
 kotlin {
     jvmToolchain(21)
     jvm()
+    androidLibrary {
+        namespace = "com.quark.player"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+    }
     sourceSets {
         commonMain.dependencies {
             api(project(":core"))
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+            implementation(libs.kotlinx.coroutines.core)
         }
         jvmMain.dependencies {
-            implementation("net.java.dev.jna:jna:5.17.0")
+            implementation(libs.jna)
+        }
+        androidMain.dependencies {
+            api(libs.media3.exoplayer)
+            // VK and some SoundCloud tracks only come as HLS playlists.
+            implementation(libs.media3.hls)
+            implementation(libs.androidx.annotation)
+            implementation(libs.kotlinx.coroutines.android)
         }
         jvmTest.dependencies {
-            implementation("net.java.dev.jna:jna:5.17.0")
+            implementation(libs.jna)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
+
 
 // The engine test drives the real library, which lives in the app module's
 // resources once :app:fetchMpv has run. Silent output: no device is opened.
